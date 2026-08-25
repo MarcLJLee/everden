@@ -1,0 +1,35 @@
+[gd_resource type="Resource" script_class="FieldTuning" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/tuning/FieldTuning.gd" id="1_tuning"]
+
+[resource]
+script = ExtResource("1_tuning")
+tile_size = 16
+map_size = Vector2i(64, 48)
+forest_patches = 10
+water_patches = 4
+rock_patches = 4
+prop_density = 0.06
+animal_count = 3
+companion_ids = Array[String](["dog", "cat"])
+companions_active_at_start = Array[String](["dog"])
+move_speed = 3.5
+wild_speed = 1.2
+companion_speed_scale = 1.25
+follow_distance = 1.4
+reveal_radius = 3.0
+guide_radius = 10.0
+activation_radius = 26.0
+interact_radius = 1.5
+base_gauge_time = 3.0
+mismatch_factor = 1.5
+camera_zoom = 2.0
+daypart_palette = {
+"낮": "day",
+"밤": "night",
+"여명": "dusk"
+}
+daypart_fade = 1.2
+eyeshine_color = Color(0.98, 0.96, 0.55, 1)
+bounce_height_px = 1
+walk_cycle_hz = 6.0

@@ -1,0 +1,28 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/field/Field.gd" id="1_field"]
+[ext_resource type="Script" path="res://scripts/field/Ground.gd" id="2_ground"]
+[ext_resource type="PackedScene" path="res://scenes/actors/Actor.tscn" id="3_actor"]
+[ext_resource type="Resource" path="res://tuning/field_tuning.tres" id="4_tuning"]
+[ext_resource type="PackedScene" path="res://scenes/ui/DebugOverlay.tscn" id="5_overlay"]
+
+[node name="Field" type="Node2D"]
+script = ExtResource("1_field")
+tuning = ExtResource("4_tuning")
+actor_scene = ExtResource("3_actor")
+
+[node name="Ground" type="Node2D" parent="."]
+script = ExtResource("2_ground")
+
+[node name="Actors" type="Node2D" parent="."]
+y_sort_enabled = true
+
+[node name="Markers" type="Node2D" parent="."]
+
+[node name="CanvasModulate" type="CanvasModulate" parent="."]
+
+[node name="Camera2D" type="Camera2D" parent="."]
+position_smoothing_enabled = true
+position_smoothing_speed = 8.0
+
+[node name="DebugOverlay" parent="." instance=ExtResource("5_overlay")]

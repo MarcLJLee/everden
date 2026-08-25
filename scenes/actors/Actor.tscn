@@ -1,0 +1,27 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/actor/Actor.gd" id="1_actor"]
+[ext_resource type="Script" path="res://scripts/actor/FaceLayer.gd" id="2_face"]
+[ext_resource type="Script" path="res://scripts/actor/EmoteLayer.gd" id="3_emote"]
+
+[node name="Actor" type="Node2D"]
+script = ExtResource("1_actor")
+
+[node name="Shadow" type="Sprite2D" parent="."]
+centered = false
+
+[node name="Body" type="Node2D" parent="."]
+script = ExtResource("2_face")
+
+[node name="BodySprite" type="AnimatedSprite2D" parent="Body"]
+centered = false
+
+[node name="Eye" type="Sprite2D" parent="Body"]
+centered = false
+
+[node name="Mouth" type="Sprite2D" parent="Body"]
+centered = false
+
+[node name="Emote" type="Sprite2D" parent="Body"]
+centered = false
+script = ExtResource("3_emote")

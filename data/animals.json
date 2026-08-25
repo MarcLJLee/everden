@@ -1,0 +1,1196 @@
+{
+  "$comment": [
+    "종(class) 정의. 개체(instance)가 아니다. — BRIEF §5.3",
+    "시작 지역: 집 근처의 뒷산과 냇가 (한국 중부 산·하천 생태, 지명은 무명) — BRIEF §3.8",
+    "size_class는 임포터가 size.adult에서 파생 계산한 값이다. 참고용으로 적어두었다.",
+    "prototype: true 인 5종이 데모 런타임의 대상이다 — BRIEF §8"
+  ],
+  "requires_behavior_schema": 1,
+  "region": {
+    "id": "home_hills",
+    "name": "뒷산과 냇가"
+  },
+  "species": [
+    {
+      "id": "dog",
+      "name": "개",
+      "prototype": true,
+      "role_note": "첫 동료. 후각으로 유도한다. 집에서 같이 온 친구라 처음부터 갖고 시작한다.",
+      "diet": "잡식",
+      "activity": "주행성",
+      "habitat": [
+        "초원",
+        "숲"
+      ],
+      "social": "무리",
+      "temperament": "대담함",
+      "noise": "시끄러움",
+      "senses": [
+        "후각"
+      ],
+      "traits": [
+        "냄새강함"
+      ],
+      "likes": [
+        "고기",
+        "씨앗"
+      ],
+      "fears": [],
+      "size": {
+        "birth": "15-20cm",
+        "adult": "55-65cm"
+      },
+      "weight": {
+        "birth": "0.4kg",
+        "adult": "20-28kg"
+      },
+      "size_class": "중",
+      "growth": [
+        {
+          "stage": "baby",
+          "from_day": 0,
+          "to_day": 5,
+          "sprite_set": "dog_baby",
+          "size": "15-20cm",
+          "weight": "0.4kg",
+          "behavior_tags": [
+            "부모근처",
+            "원정불가",
+            "번식불가"
+          ]
+        },
+        {
+          "stage": "adult",
+          "from_day": 5,
+          "to_day": null,
+          "sprite_set": "dog_adult",
+          "size": "55-65cm",
+          "weight": "20-28kg",
+          "behavior_tags": [
+            "무리",
+            "원정가능",
+            "번식가능"
+          ]
+        }
+      ],
+      "stats_range": {
+        "sense_range": [
+          1.2,
+          1.6
+        ],
+        "charm": [
+          1.0,
+          1.3
+        ]
+      },
+      "sprite_set": {
+        "eye_style": "round",
+        "mouth_style": "wide",
+        "idle_animation": "꼬리흔들기",
+        "move_effect": "먼지",
+        "eye_anchor": {
+          "front": [
+            16,
+            9
+          ],
+          "side": [
+            24,
+            10
+          ]
+        },
+        "mouth_anchor": {
+          "front": [
+            16,
+            13
+          ],
+          "side": [
+            27,
+            13
+          ]
+        },
+        "head_anchor": [
+          16,
+          2
+        ],
+        "animation_rig": "quadruped",
+        "anchors_verified": "sprites/ 의 실제 도트에서 확인함"
+      }
+    },
+    {
+      "id": "cat",
+      "name": "고양이",
+      "prototype": true,
+      "role_note": "두 번째 동료. 청각·시야로 유도한다. 개(후각)와 감각이 달라서 '누굴 데려갈까'가 프로토타입에서 실제로 검증된다. 실루엣은 뾰족 귀와 보송한 윤곽이 만든다 — 꼬리가 짧아서(한국 길고양이) 꼬리로는 구분되지 않는다.",
+      "diet": "육식",
+      "activity": "박명성",
+      "habitat": [
+        "초원",
+        "숲",
+        "바위"
+      ],
+      "social": "단독",
+      "temperament": "호기심",
+      "noise": "보통",
+      "senses": [
+        "청각",
+        "시야"
+      ],
+      "traits": [
+        "털",
+        "울음소리"
+      ],
+      "likes": [
+        "고기",
+        "물고기"
+      ],
+      "fears": [
+        "큰소리"
+      ],
+      "size": {
+        "birth": "10-12cm",
+        "adult": "45-50cm"
+      },
+      "weight": {
+        "birth": "0.1kg",
+        "adult": "3-5kg"
+      },
+      "size_class": "중",
+      "growth": [
+        {
+          "stage": "baby",
+          "from_day": 0,
+          "to_day": 4,
+          "sprite_set": "cat_baby",
+          "size": "10-12cm",
+          "weight": "0.1kg",
+          "behavior_tags": [
+            "부모근처",
+            "원정불가",
+            "번식불가"
+          ]
+        },
+        {
+          "stage": "adult",
+          "from_day": 4,
+          "to_day": null,
+          "sprite_set": "cat_adult",
+          "size": "45-50cm",
+          "weight": "3-5kg",
+          "behavior_tags": [
+            "단독행동",
+            "원정가능",
+            "번식가능"
+          ]
+        }
+      ],
+      "stats_range": {
+        "sense_range": [
+          1.0,
+          1.4
+        ],
+        "charm": [
+          1.1,
+          1.4
+        ]
+      },
+      "sprite_set": {
+        "eye_style": "round",
+        "mouth_style": "small",
+        "idle_animation": "꼬리흔들기",
+        "move_effect": "없음",
+        "animation_rig": "quadruped",
+        "eye_anchor": {
+          "front": [
+            16,
+            12
+          ],
+          "side": [
+            24,
+            12
+          ]
+        },
+        "mouth_anchor": {
+          "front": [
+            16,
+            14
+          ],
+          "side": [
+            27,
+            15
+          ]
+        },
+        "head_anchor": [
+          16,
+          2
+        ],
+        "anchors_verified": "주둥이가 짧아 눈이 앞에 붙는다 — 개는 눈 뒤로 주둥이가 3px 더 나가고 고양이는 거의 안 나간다"
+      }
+    },
+    {
+      "id": "squirrel",
+      "name": "청설모",
+      "prototype": true,
+      "diet": "초식",
+      "activity": "주행성",
+      "habitat": [
+        "숲"
+      ],
+      "social": "단독",
+      "temperament": "겁많음",
+      "noise": "보통",
+      "senses": [
+        "시야"
+      ],
+      "traits": [
+        "나무흔적"
+      ],
+      "likes": [
+        "견과",
+        "씨앗"
+      ],
+      "fears": [
+        "육식",
+        "큰소리",
+        "빠른접근"
+      ],
+      "size": {
+        "birth": "6-7cm",
+        "adult": "18-24cm"
+      },
+      "weight": {
+        "birth": "0.01kg",
+        "adult": "0.3-0.4kg"
+      },
+      "size_class": "소",
+      "growth": [
+        {
+          "stage": "baby",
+          "from_day": 0,
+          "to_day": 3,
+          "sprite_set": "squirrel_baby",
+          "size": "6-7cm",
+          "weight": "0.01kg",
+          "behavior_tags": [
+            "부모근처",
+            "원정불가",
+            "번식불가"
+          ]
+        },
+        {
+          "stage": "adult",
+          "from_day": 3,
+          "to_day": null,
+          "sprite_set": "squirrel_adult",
+          "size": "18-24cm",
+          "weight": "0.3-0.4kg",
+          "behavior_tags": [
+            "단독행동",
+            "나무선호",
+            "원정가능",
+            "번식가능"
+          ]
+        }
+      ],
+      "stats_range": {
+        "sense_range": [
+          0.7,
+          0.9
+        ],
+        "charm": [
+          1.1,
+          1.4
+        ]
+      },
+      "sprite_set": {
+        "eye_style": "big",
+        "mouth_style": "small",
+        "idle_animation": "기본",
+        "move_effect": "낙엽",
+        "eye_anchor": {
+          "front": [
+            13,
+            10
+          ],
+          "side": [
+            18,
+            10
+          ]
+        },
+        "mouth_anchor": {
+          "front": [
+            13,
+            12
+          ],
+          "side": [
+            20,
+            12
+          ]
+        },
+        "head_anchor": [
+          12,
+          2
+        ],
+        "animation_rig": "quadruped",
+        "anchors_verified": "sprites/ 의 실제 도트에서 확인함"
+      }
+    },
+    {
+      "id": "raccoon_dog",
+      "name": "너구리",
+      "prototype": true,
+      "diet": "잡식",
+      "activity": "야행성",
+      "habitat": [
+        "숲",
+        "물가"
+      ],
+      "social": "쌍",
+      "temperament": "호기심",
+      "noise": "조용함",
+      "senses": [
+        "후각"
+      ],
+      "traits": [
+        "냄새강함",
+        "발자국"
+      ],
+      "likes": [
+        "열매",
+        "곤충",
+        "물고기"
+      ],
+      "fears": [
+        "큰소리"
+      ],
+      "size": {
+        "birth": "15-18cm",
+        "adult": "50-68cm"
+      },
+      "weight": {
+        "birth": "0.1kg",
+        "adult": "4-10kg"
+      },
+      "size_class": "중",
+      "growth": [
+        {
+          "stage": "baby",
+          "from_day": 0,
+          "to_day": 4,
+          "sprite_set": "raccoon_dog_baby",
+          "size": "15-18cm",
+          "weight": "0.1kg",
+          "behavior_tags": [
+            "부모근처",
+            "원정불가",
+            "번식불가"
+          ]
+        },
+        {
+          "stage": "adult",
+          "from_day": 4,
+          "to_day": null,
+          "sprite_set": "raccoon_dog_adult",
+          "size": "50-68cm",
+          "weight": "4-10kg",
+          "behavior_tags": [
+            "야간활동",
+            "원정가능",
+            "번식가능"
+          ]
+        }
+      ],
+      "stats_range": {
+        "sense_range": [
+          0.9,
+          1.2
+        ],
+        "charm": [
+          0.9,
+          1.2
+        ]
+      },
+      "sprite_set": {
+        "eye_style": "narrow",
+        "mouth_style": "small",
+        "idle_animation": "몸털기",
+        "move_effect": "먼지",
+        "eye_anchor": {
+          "front": [
+            16,
+            12
+          ],
+          "side": [
+            21,
+            12
+          ]
+        },
+        "mouth_anchor": {
+          "front": [
+            16,
+            17
+          ],
+          "side": [
+            24,
+            16
+          ]
+        },
+        "head_anchor": [
+          16,
+          5
+        ],
+        "animation_rig": "quadruped"
+      }
+    },
+    {
+      "id": "otter",
+      "name": "수달",
+      "prototype": true,
+      "diet": "육식",
+      "activity": "박명성",
+      "habitat": [
+        "물가"
+      ],
+      "social": "무리",
+      "temperament": "호기심",
+      "noise": "보통",
+      "senses": [
+        "후각"
+      ],
+      "traits": [
+        "물자국",
+        "냄새강함"
+      ],
+      "likes": [
+        "물고기"
+      ],
+      "fears": [
+        "큰소리",
+        "빠른접근"
+      ],
+      "size": {
+        "birth": "20-25cm",
+        "adult": "60-80cm"
+      },
+      "weight": {
+        "birth": "0.12kg",
+        "adult": "6-10kg"
+      },
+      "size_class": "중",
+      "growth": [
+        {
+          "stage": "baby",
+          "from_day": 0,
+          "to_day": 5,
+          "sprite_set": "otter_baby",
+          "size": "20-25cm",
+          "weight": "0.12kg",
+          "behavior_tags": [
+            "부모근처",
+            "물가선호",
+            "원정불가",
+            "번식불가"
+          ]
+        },
+        {
+          "stage": "adult",
+          "from_day": 5,
+          "to_day": null,
+          "sprite_set": "otter_adult",
+          "size": "60-80cm",
+          "weight": "6-10kg",
+          "behavior_tags": [
+            "무리",
+            "물가선호",
+            "원정가능",
+            "번식가능"
+          ]
+        }
+      ],
+      "stats_range": {
+        "sense_range": [
+          0.8,
+          1.1
+        ],
+        "charm": [
+          1.2,
+          1.5
+        ]
+      },
+      "sprite_set": {
+        "eye_style": "dot",
+        "mouth_style": "wide",
+        "idle_animation": "기본",
+        "move_effect": "물방울",
+        "eye_anchor": {
+          "front": [
+            16,
+            14
+          ],
+          "side": [
+            23,
+            14
+          ]
+        },
+        "mouth_anchor": {
+          "front": [
+            16,
+            18
+          ],
+          "side": [
+            26,
+            17
+          ]
+        },
+        "head_anchor": [
+          16,
+          7
+        ],
+        "animation_rig": "quadruped"
+      }
+    },
+    {
+      "id": "water_deer",
+      "name": "고라니",
+      "prototype": true,
+      "fun_fact": "전 세계 개체의 대부분이 한국에 산다.",
+      "diet": "초식",
+      "activity": "박명성",
+      "habitat": [
+        "초원",
+        "숲"
+      ],
+      "social": "단독",
+      "temperament": "겁많음",
+      "noise": "조용함",
+      "senses": [
+        "청각"
+      ],
+      "traits": [
+        "큰발자국"
+      ],
+      "likes": [
+        "풀",
+        "나뭇잎",
+        "뿌리"
+      ],
+      "fears": [
+        "육식",
+        "큰소리",
+        "대형"
+      ],
+      "size": {
+        "birth": "30-35cm",
+        "adult": "75-100cm"
+      },
+      "weight": {
+        "birth": "0.7kg",
+        "adult": "9-15kg"
+      },
+      "size_class": "대",
+      "growth": [
+        {
+          "stage": "baby",
+          "from_day": 0,
+          "to_day": 6,
+          "sprite_set": "water_deer_baby",
+          "size": "30-35cm",
+          "weight": "0.7kg",
+          "behavior_tags": [
+            "부모근처",
+            "원정불가",
+            "번식불가"
+          ]
+        },
+        {
+          "stage": "adult",
+          "from_day": 6,
+          "to_day": null,
+          "sprite_set": "water_deer_adult",
+          "size": "75-100cm",
+          "weight": "9-15kg",
+          "behavior_tags": [
+            "단독행동",
+            "원정가능",
+            "번식가능"
+          ]
+        }
+      ],
+      "stats_range": {
+        "sense_range": [
+          1.0,
+          1.3
+        ],
+        "charm": [
+          0.7,
+          1.0
+        ]
+      },
+      "sprite_set": {
+        "eye_style": "big",
+        "mouth_style": "small",
+        "idle_animation": "귀쫑긋",
+        "move_effect": "먼지",
+        "eye_anchor": {
+          "front": [
+            24,
+            13
+          ],
+          "side": [
+            33,
+            13
+          ]
+        },
+        "mouth_anchor": {
+          "front": [
+            24,
+            19
+          ],
+          "side": [
+            38,
+            18
+          ]
+        },
+        "head_anchor": [
+          24,
+          4
+        ],
+        "animation_rig": "quadruped"
+      }
+    },
+    {
+      "id": "leopard_cat",
+      "name": "삵",
+      "prototype": false,
+      "role_note": "육식 상성 축 확장용. ⚠️ 고양이와 실루엣이 겹치므로 함께 넣을 때 형태 차별화(귀 술, 굵은 꼬리, 반점)가 필요하다.",
+      "diet": "육식",
+      "activity": "야행성",
+      "habitat": [
+        "숲",
+        "바위"
+      ],
+      "social": "단독",
+      "temperament": "대담함",
+      "noise": "조용함",
+      "senses": [
+        "청각",
+        "시야"
+      ],
+      "traits": [
+        "발자국"
+      ],
+      "likes": [
+        "고기"
+      ],
+      "fears": [],
+      "size": {
+        "birth": "12-15cm",
+        "adult": "45-65cm"
+      },
+      "weight": {
+        "birth": "0.08kg",
+        "adult": "3-6kg"
+      },
+      "size_class": "중",
+      "growth": [
+        {
+          "stage": "baby",
+          "from_day": 0,
+          "to_day": 5,
+          "sprite_set": "leopard_cat_baby",
+          "size": "12-15cm",
+          "weight": "0.08kg",
+          "behavior_tags": [
+            "부모근처",
+            "원정불가",
+            "번식불가"
+          ]
+        },
+        {
+          "stage": "adult",
+          "from_day": 5,
+          "to_day": null,
+          "sprite_set": "leopard_cat_adult",
+          "size": "45-65cm",
+          "weight": "3-6kg",
+          "behavior_tags": [
+            "단독행동",
+            "야간활동",
+            "원정가능",
+            "번식가능"
+          ]
+        }
+      ],
+      "stats_range": {
+        "sense_range": [
+          1.1,
+          1.4
+        ],
+        "charm": [
+          0.6,
+          0.9
+        ]
+      },
+      "sprite_set": {
+        "eye_style": "narrow",
+        "mouth_style": "wide",
+        "idle_animation": "기본",
+        "move_effect": "없음",
+        "eye_anchor": {
+          "front": [
+            16,
+            11
+          ],
+          "side": [
+            22,
+            11
+          ]
+        },
+        "mouth_anchor": {
+          "front": [
+            16,
+            15
+          ],
+          "side": [
+            25,
+            14
+          ]
+        },
+        "head_anchor": [
+          16,
+          4
+        ],
+        "animation_rig": "quadruped"
+      }
+    },
+    {
+      "id": "toad",
+      "name": "두꺼비",
+      "prototype": false,
+      "role_note": "감각이 없는 종. 동료로는 못 쓰고 사파리에만 사는 경우의 검증용.",
+      "diet": "육식",
+      "activity": "야행성",
+      "habitat": [
+        "물가",
+        "숲"
+      ],
+      "social": "단독",
+      "temperament": "겁많음",
+      "noise": "보통",
+      "senses": [],
+      "traits": [
+        "울음소리"
+      ],
+      "likes": [
+        "곤충"
+      ],
+      "fears": [
+        "빠른접근"
+      ],
+      "size": {
+        "birth": "1-2cm",
+        "adult": "8-16cm"
+      },
+      "weight": {
+        "birth": "0.001kg",
+        "adult": "0.05-0.2kg"
+      },
+      "size_class": "소",
+      "growth": [
+        {
+          "stage": "baby",
+          "from_day": 0,
+          "to_day": 3,
+          "sprite_set": "toad_baby",
+          "size": "1-2cm",
+          "weight": "0.001kg",
+          "behavior_tags": [
+            "부모근처",
+            "물가선호",
+            "원정불가",
+            "번식불가"
+          ]
+        },
+        {
+          "stage": "adult",
+          "from_day": 3,
+          "to_day": null,
+          "sprite_set": "toad_adult",
+          "size": "8-16cm",
+          "weight": "0.05-0.2kg",
+          "behavior_tags": [
+            "단독행동",
+            "물가선호",
+            "야간활동",
+            "번식가능",
+            "원정불가"
+          ]
+        }
+      ],
+      "stats_range": {
+        "sense_range": [
+          0.5,
+          0.7
+        ],
+        "charm": [
+          0.8,
+          1.1
+        ]
+      },
+      "sprite_set": {
+        "eye_style": "big",
+        "mouth_style": "wide",
+        "idle_animation": "기본",
+        "move_effect": "없음",
+        "eye_anchor": {
+          "front": [
+            12,
+            9
+          ],
+          "side": [
+            15,
+            9
+          ]
+        },
+        "mouth_anchor": {
+          "front": [
+            12,
+            13
+          ],
+          "side": [
+            18,
+            12
+          ]
+        },
+        "head_anchor": [
+          12,
+          4
+        ],
+        "animation_rig": "quadruped"
+      }
+    },
+    {
+      "id": "magpie",
+      "name": "까치",
+      "prototype": false,
+      "role_note": "소리 상성 축과 색 다양성(흑백) 담당. 이동은 나는 게 아니라 통통 뛰기(biped_hop)라 스프라이트 구성은 네발동물과 같다.",
+      "diet": "잡식",
+      "activity": "주행성",
+      "habitat": [
+        "초원",
+        "숲"
+      ],
+      "social": "무리",
+      "temperament": "대담함",
+      "noise": "시끄러움",
+      "senses": [
+        "시야"
+      ],
+      "traits": [
+        "울음소리"
+      ],
+      "likes": [
+        "곤충",
+        "열매",
+        "씨앗"
+      ],
+      "fears": [
+        "육식"
+      ],
+      "size": {
+        "birth": "5-6cm",
+        "adult": "22-28cm"
+      },
+      "weight": {
+        "birth": "0.02kg",
+        "adult": "0.2-0.25kg"
+      },
+      "size_class": "소",
+      "growth": [
+        {
+          "stage": "baby",
+          "from_day": 0,
+          "to_day": 3,
+          "sprite_set": "magpie_baby",
+          "size": "5-6cm",
+          "weight": "0.02kg",
+          "behavior_tags": [
+            "부모근처",
+            "원정불가",
+            "번식불가"
+          ]
+        },
+        {
+          "stage": "adult",
+          "from_day": 3,
+          "to_day": null,
+          "sprite_set": "magpie_adult",
+          "size": "22-28cm",
+          "weight": "0.2-0.25kg",
+          "behavior_tags": [
+            "무리",
+            "나무선호",
+            "원정가능",
+            "번식가능"
+          ]
+        }
+      ],
+      "stats_range": {
+        "sense_range": [
+          1.0,
+          1.4
+        ],
+        "charm": [
+          0.9,
+          1.2
+        ]
+      },
+      "sprite_set": {
+        "eye_style": "dot",
+        "mouth_style": "beak",
+        "idle_animation": "기본",
+        "move_effect": "없음",
+        "eye_anchor": {
+          "front": [
+            12,
+            7
+          ],
+          "side": [
+            16,
+            7
+          ]
+        },
+        "mouth_anchor": {
+          "front": [
+            12,
+            10
+          ],
+          "side": [
+            19,
+            9
+          ]
+        },
+        "head_anchor": [
+          12,
+          2
+        ],
+        "animation_rig": "biped_hop"
+      }
+    },
+    {
+      "id": "sparrow",
+      "name": "참새",
+      "prototype": false,
+      "role_note": "가장 흔한 동물. 태그가 까치와 거의 겹치므로 규칙상 구분되지 않는다 — 차이는 크기·실루엣·색에서 온다. seat 정원 감각을 시험하기 좋은 종.",
+      "diet": "잡식",
+      "activity": "주행성",
+      "habitat": [
+        "초원",
+        "숲"
+      ],
+      "social": "무리",
+      "temperament": "겁많음",
+      "noise": "시끄러움",
+      "senses": [
+        "시야"
+      ],
+      "traits": [
+        "울음소리"
+      ],
+      "likes": [
+        "씨앗",
+        "곤충"
+      ],
+      "fears": [
+        "육식",
+        "빠른접근"
+      ],
+      "size": {
+        "birth": "2-3cm",
+        "adult": "12-15cm"
+      },
+      "weight": {
+        "birth": "0.002kg",
+        "adult": "0.02-0.03kg"
+      },
+      "size_class": "소",
+      "growth": [
+        {
+          "stage": "baby",
+          "from_day": 0,
+          "to_day": 2,
+          "sprite_set": "sparrow_baby",
+          "size": "2-3cm",
+          "weight": "0.002kg",
+          "behavior_tags": [
+            "부모근처",
+            "원정불가",
+            "번식불가"
+          ]
+        },
+        {
+          "stage": "adult",
+          "from_day": 2,
+          "to_day": null,
+          "sprite_set": "sparrow_adult",
+          "size": "12-15cm",
+          "weight": "0.02-0.03kg",
+          "behavior_tags": [
+            "무리",
+            "나무선호",
+            "원정가능",
+            "번식가능"
+          ]
+        }
+      ],
+      "stats_range": {
+        "sense_range": [
+          0.8,
+          1.1
+        ],
+        "charm": [
+          1.0,
+          1.3
+        ]
+      },
+      "sprite_set": {
+        "eye_style": "dot",
+        "mouth_style": "beak",
+        "idle_animation": "기본",
+        "move_effect": "없음",
+        "animation_rig": "biped_hop",
+        "eye_anchor": {
+          "front": [
+            12,
+            7
+          ],
+          "side": [
+            15,
+            7
+          ]
+        },
+        "mouth_anchor": {
+          "front": [
+            12,
+            10
+          ],
+          "side": [
+            18,
+            9
+          ]
+        },
+        "head_anchor": [
+          12,
+          2
+        ]
+      }
+    },
+    {
+      "id": "snake",
+      "name": "뱀",
+      "prototype": false,
+      "role_note": "다리가 없어 animation_rig 가 serpentine 이다. 장수는 같지만(22장) 4방향 좌우 flip이 안 먹어 난이도가 높다. 무섭지 않게 — 눈을 크고 둥글게.",
+      "size_class_note": "파생 계산은 '대'(길이 85cm)지만 부피가 작아 '소'로 수동 오버라이드했다. 실측 파생의 한계를 보여주는 첫 실제 사례.",
+      "diet": "육식",
+      "activity": "박명성",
+      "habitat": [
+        "바위",
+        "숲",
+        "물가"
+      ],
+      "social": "단독",
+      "temperament": "겁많음",
+      "noise": "조용함",
+      "senses": [
+        "후각"
+      ],
+      "traits": [
+        "허물"
+      ],
+      "likes": [
+        "곤충",
+        "고기"
+      ],
+      "fears": [
+        "빠른접근"
+      ],
+      "size": {
+        "birth": "15-20cm",
+        "adult": "70-100cm"
+      },
+      "weight": {
+        "birth": "0.005kg",
+        "adult": "0.3-0.8kg"
+      },
+      "size_class": "소",
+      "growth": [
+        {
+          "stage": "baby",
+          "from_day": 0,
+          "to_day": 4,
+          "sprite_set": "snake_baby",
+          "size": "15-20cm",
+          "weight": "0.005kg",
+          "behavior_tags": [
+            "단독행동",
+            "원정불가",
+            "번식불가"
+          ]
+        },
+        {
+          "stage": "adult",
+          "from_day": 4,
+          "to_day": null,
+          "sprite_set": "snake_adult",
+          "size": "70-100cm",
+          "weight": "0.3-0.8kg",
+          "behavior_tags": [
+            "단독행동",
+            "원정가능",
+            "번식가능"
+          ]
+        }
+      ],
+      "stats_range": {
+        "sense_range": [
+          0.9,
+          1.2
+        ],
+        "charm": [
+          0.6,
+          0.9
+        ]
+      },
+      "sprite_set": {
+        "eye_style": "big",
+        "mouth_style": "small",
+        "idle_animation": "혀날름",
+        "move_effect": "없음",
+        "animation_rig": "serpentine",
+        "eye_anchor": {
+          "front": [
+            12,
+            9
+          ],
+          "side": [
+            17,
+            9
+          ]
+        },
+        "mouth_anchor": {
+          "front": [
+            12,
+            12
+          ],
+          "side": [
+            19,
+            11
+          ]
+        },
+        "head_anchor": [
+          12,
+          4
+        ]
+      }
+    }
+  ]
+}

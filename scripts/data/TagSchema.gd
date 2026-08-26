@@ -10,7 +10,9 @@ var optional_tags: Dictionary = {}      ## field -> Array[String]
 var trait_to_sense: Dictionary = {}     ## trait -> {sense, clue}
 var sense_profile: Dictionary = {}
 var eyeshine: Dictionary = {}
-var terrain_walkable: Dictionary = {}   ## 지형 -> 플레이어가 밟을 수 있는가           ## activity -> 눈이 빛나 보이는 시간대 목록      ## sense -> {reveals, range_scale, daypart_scale, terrain_scale}
+var terrain_walkable: Dictionary = {}   ## 지형 -> 플레이어가 밟을 수 있는가
+var weather: Dictionary = {}            ## 날씨 -> {sense_scale, shows}
+var activity_presence: Dictionary = {}  ## activity -> {시간대: 나와 있을 확률}           ## activity -> 눈이 빛나 보이는 시간대 목록      ## sense -> {reveals, range_scale, daypart_scale, terrain_scale}
 var emote_icons: Dictionary = {}
 var expression_set: Dictionary = {}
 var derivations: Dictionary = {}
@@ -26,6 +28,8 @@ static func from_dict(raw: Dictionary) -> TagSchema:
 	s.sense_profile = _strip_comments(raw.get("sense_profile", {}))
 	s.eyeshine = _strip_comments(raw.get("eyeshine", {})).get("by_activity", {})
 	s.terrain_walkable = _strip_comments(raw.get("terrain_walkable", {}))
+	s.weather = _strip_comments(raw.get("weather", {}))
+	s.activity_presence = _strip_comments(raw.get("activity_presence", {}))
 	s.emote_icons = _strip_comments(raw.get("emote_icons", {}))
 	s.expression_set = _strip_comments(raw.get("expression_set", {}))
 	s.derivations = _strip_comments(raw.get("derivations", {}))
@@ -90,6 +94,41 @@ func eyeshines_at(activity: String, daypart: String) -> bool:
 ## 물가·바위는 서식지라 막으면 그 종이 자기 집에 못 산다.
 func walkable(terrain: String) -> bool:
 	return bool(terrain_walkable.get(terrain, true))
+
+## 날씨가 이 감각에 곱하는 배율. 시간대·지형과 같은 자리에 붙는 세 번째 축이다.
+func sense_weather_scale(sense: String, weather_name: String) -> float:
+	var table: Dictionary = weather.get(weather_name, {}).get("sense_scale", {})
+	return float(table.get(sense, 1.0))
+
+
+## 이 날씨가 화면에서 무엇으로 보이는가. 보이지 않는 규칙을 만들지 않는다.
+func weather_shows(weather_name: String) -> String:
+	return String(weather.get(weather_name, {}).get("shows", ""))
+
+
+func weather_kinds() -> Array:
+	return weather.keys()
+
+
+## 이 종이 그 시간대에 나와 있을 확률.
+##
+## 기본값은 activity 태그가 준다. 종이 다르게 굴면 animals.json 의 `presence` 가 덮는다 —
+## 같은 야행성이라도 "주로 밤"과 "낮에는 절대 없음"이 갈리기 때문이다.
+## 0 이면 그 시간대엔 아예 없다 — 박쥐를 낮에 못 찾는 것이 이 값이다.
+func presence_chance(species: Dictionary, daypart: String) -> float:
+	var override: Dictionary = species.get("presence", {})
+	if override.has(daypart):
+		return clampf(float(override[daypart]), 0.0, 1.0)
+	var activity := String(species.get("activity", ""))
+	return float(activity_presence.get(activity, {}).get(daypart, 1.0))
+
+
+## 시간대 이름들 — 검증기가 presence 의 키를 대조할 때 쓴다.
+func dayparts() -> Array:
+	for activity in activity_presence:
+		return activity_presence[activity].keys()
+	return []
+
 
 func known_senses() -> Array:
 	return sense_profile.keys()

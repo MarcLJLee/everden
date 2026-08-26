@@ -20,6 +20,7 @@ var _schema: TagSchema = null
 var _tuning: FieldTuning = null
 var _terrain: TerrainMap = null
 var _daypart := "낮"
+var _weather := "맑음"
 
 func setup(schema: TagSchema, tuning: FieldTuning, terrain: TerrainMap) -> void:
 	_schema = schema
@@ -30,12 +31,17 @@ func set_daypart(daypart: String) -> void:
 	_daypart = daypart
 
 
+func set_weather(weather: String) -> void:
+	_weather = weather
+
+
 ## 이 동료가 이 감각으로 닿는 거리(픽셀). 대상이 어디에 서 있느냐까지 들어간다.
 ##   guide_radius × 개체 sense_range × 감각 배율 × 시간대 배율 × 대상 지형 배율
 func reach(companion: Actor, sense: String, target_position := Vector2.INF) -> float:
 	var reach_tiles := _tuning.guide_radius * companion.sense_scale
 	reach_tiles *= _schema.sense_range_scale(sense)
 	reach_tiles *= _schema.sense_daypart_scale(sense, _daypart)
+	reach_tiles *= _schema.sense_weather_scale(sense, _weather)
 	if target_position != Vector2.INF and _terrain != null:
 		reach_tiles *= _schema.sense_terrain_scale(sense, _terrain.at_world(target_position))
 	return reach_tiles * _tuning.tile_size

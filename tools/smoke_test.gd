@@ -42,6 +42,8 @@ func _run() -> void:
 	await _test_boot()
 	await _test_sense_reach(field)
 	await _test_terrain_walk(field)
+	await _test_weather(field)
+	await _test_presence(field)
 	await _test_eyeshine(field)
 	await _test_puff(field)
 	await _test_invite(field)
@@ -614,6 +616,96 @@ func _test_terrain_walk(field) -> void:
 	await process_frame
 
 
+## ★ 날씨 — 감각에 걸리는 세 번째 축 (사용자 요청)
+func _test_weather(field) -> void:
+	var schema: TagSchema = field.schema
+	var dog: Actor = _find_companion(field, "dog")     # 후각
+	var cat: Actor = _find_companion(field, "cat")     # 청각 · 시야
+	field._apply_daypart("낮")
+
+	field._apply_weather("맑음")
+	var nose_clear: float = field.guide.reach_tiles(dog, "후각")
+	var eye_clear: float = field.guide.reach_tiles(cat, "시야")
+
+	field._apply_weather("비")
+	var nose_rain: float = field.guide.reach_tiles(dog, "후각")
+	var eye_rain: float = field.guide.reach_tiles(cat, "시야")
+	_check("비가 오면 냄새가 씻긴다", nose_rain < nose_clear * 0.6,
+		"%.1f → %.1f타일" % [nose_clear, nose_rain])
+
+	field._apply_weather("안개")
+	var nose_fog: float = field.guide.reach_tiles(dog, "후각")
+	var eye_fog: float = field.guide.reach_tiles(cat, "시야")
+	_check("안개는 시야를 먹는다", eye_fog < eye_clear * 0.5,
+		"%.1f → %.1f타일" % [eye_clear, eye_fog])
+	_check("안개는 냄새를 건드리지 않는다", is_equal_approx(nose_fog, nose_clear))
+
+	# ★ 여기서 나오는 것: 날씨가 '누굴 데려갈까'를 흔든다.
+	#   비가 개의 코를 뒤집지는 못한다 — 후각이 워낙 멀어서다. 대신 격차를 좁힌다.
+	var ear_clear: float = field.guide.reach_tiles(cat, "청각")
+	field._apply_weather("비")
+	var ear_rain: float = field.guide.reach_tiles(cat, "청각")
+	_check("비는 개의 우위를 좁힌다",
+		nose_rain / maxf(ear_rain, 0.01) < nose_clear / maxf(ear_clear, 0.01) * 0.8,
+		"맑음 %.2f배 → 비 %.2f배" % [nose_clear / ear_clear, nose_rain / ear_rain])
+	field._apply_weather("안개")
+	_check("안개 낀 날엔 개가 고양이보다 멀리 본다", nose_fog > eye_fog,
+		"후각 %.1f vs 시야 %.1f" % [nose_fog, eye_fog])
+
+	# 보이지 않는 규칙을 만들지 않는다
+	var invisible := PackedStringArray()
+	for kind in schema.weather_kinds():
+		if schema.weather_shows(String(kind)).is_empty():
+			invisible.append(String(kind))
+	_check("모든 날씨가 화면에서 무엇으로 보이는지 적혀 있다", invisible.is_empty(),
+		", ".join(invisible))
+
+	field._apply_weather("맑음")
+	await process_frame
+
+
+## ★ 시간대는 감각 반경만이 아니라 **누가 나와 있는가**를 바꾼다 (사용자 요청)
+func _test_presence(field) -> void:
+	var schema: TagSchema = field.schema
+	# 박쥐(야행성)를 낮에 못 찾는 것이 이 규칙이다
+	_check("야행성은 낮에 필드에 없다",
+		is_zero_approx(schema.presence_chance({"activity": "야행성"}, "낮")))
+	_check("주행성은 밤에 필드에 없다",
+		is_zero_approx(schema.presence_chance({"activity": "주행성"}, "밤")))
+	_check("박명성은 여명에 가장 많다",
+		schema.presence_chance({"activity": "박명성"}, "여명")
+			> schema.presence_chance({"activity": "박명성"}, "낮"))
+	# 박명성을 0 으로 두지 않은 것은 게이지의 시간대 계수가 살아 있어야 해서다
+	_check("박명성은 낮에도 가끔 있다 — 게이지의 시간대 계수가 죽지 않게",
+		schema.presence_chance({"activity": "박명성"}, "낮") > 0.0)
+
+	# ★ 종이 자기 조건을 직접 들 수 있다. 같은 야행성이라도 강도가 다르다.
+	var strict := {"activity": "야행성", "presence": {"여명": 0.0}}
+	_check("종의 presence 가 activity 기본값을 덮는다",
+		is_zero_approx(schema.presence_chance(strict, "여명"))
+		and schema.presence_chance({"activity": "야행성"}, "여명") > 0.0)
+
+	# 실제 필드에서도 그대로 나와야 한다
+	field._apply_daypart("낮")
+	var night_out := 0
+	for animal in field.sim.animals:
+		if String(animal.species.get("activity", "")) == "야행성" and animal.present:
+			night_out += 1
+	_check("낮에는 야행성이 한 마리도 안 나와 있다", night_out == 0, str(night_out))
+
+	field._apply_daypart("밤")
+	var day_out := 0
+	for animal in field.sim.animals:
+		if String(animal.species.get("activity", "")) == "주행성" and animal.present:
+			day_out += 1
+	_check("밤에는 주행성이 한 마리도 안 나와 있다", day_out == 0, str(day_out))
+	_check("사라진 동물은 유도 대상에서도 빠진다",
+		field.sim.count_present() < field.sim.animals.size())
+
+	field._apply_daypart("낮")
+	await process_frame
+
+
 ## ★ 어두울 때 눈이 되비춘다 — 종이 아니라 activity 로 (사용자 요청)
 func _test_eyeshine(field) -> void:
 	var schema: TagSchema = field.schema
@@ -743,9 +835,12 @@ func _find_terrain_point(field, terrain_name: String) -> Vector2:
 	return best
 
 
+## 특정 종을 집어 오는 헬퍼. 지금 시간대에 안 나와 있을 수 있으므로 세워서 준다 —
+## 여기서 검사하는 것은 노출·교감이지 존재 규칙이 아니다 (그건 _test_presence 가 본다).
 func _find_animal(field, id: String) -> FieldSim.WildAnimal:
 	for animal in field.sim.animals:
 		if animal.species.get("id") == id and not animal.invited:
+			animal.present = true
 			return animal
 	return null
 

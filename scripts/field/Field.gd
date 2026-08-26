@@ -29,6 +29,8 @@ var terrain := TerrainMap.new()
 var player: Actor = null
 var companions: Array[Actor] = []
 var daypart := "낮"
+## 날씨는 감각에 걸리는 세 번째 축이다. 비는 후각을 씻고 안개는 시야를 먹는다.
+var weather := "맑음"
 
 var _rng := RandomNumberGenerator.new()
 var _bounds := Rect2()
@@ -95,6 +97,7 @@ func _ready() -> void:
 	_palette_to = _palette_from
 	_palette_t = 1.0
 	_apply_daypart(daypart)
+	_apply_weather(weather)
 	_advance_palette(0.0)
 
 
@@ -375,6 +378,9 @@ func _handle_debug_input() -> void:
 		_toggle_companion(0)
 	if Input.is_action_just_pressed("debug_toggle_companion_2"):
 		_toggle_companion(1)
+	if Input.is_action_just_pressed("debug_cycle_weather"):
+		var kinds := schema.weather_kinds()
+		_apply_weather(String(kinds[(kinds.find(weather) + 1) % kinds.size()]))
 	if Input.is_action_just_pressed("debug_cycle_daypart"):
 		_apply_daypart(DAYPARTS[(DAYPARTS.find(daypart) + 1) % DAYPARTS.size()])
 	if Input.is_action_just_pressed("debug_reset_run"):
@@ -385,9 +391,27 @@ func _apply_daypart(next: String) -> void:
 	# 지금 색에서 새 색으로 넘어간다. 튀지 않게 보간하는 것이 핵심이다 (HANDOFF §2-4).
 	_palette_from = _blended_palette_name()
 	daypart = next
+	# ★ 시간대는 감각 반경만 바꾸는 게 아니라 **누가 나와 있는가**를 바꾼다.
+	#   밤에만 나오는 동물은 낮에 아예 없다.
+	if schema != null:
+		for change in sim.apply_daypart(schema, daypart):
+			if not change["was_visible"]:
+				continue
+			# 눈앞에서 사라졌다면 먼지를 남긴다. 그냥 없어지면 사라진 줄도 모른다.
+			var animal: FieldSim.WildAnimal = change["animal"]
+			_puffs.append({
+				"position": animal.position + Vector2(0, -10),
+				"age": 0.0,
+				"hiding": not change["present"],
+			})
 	_palette_to = _palette_of(daypart)
 	_palette_t = 0.0 if _palette_from != _palette_to else 1.0
 	guide.set_daypart(daypart)
+
+
+func _apply_weather(next: String) -> void:
+	weather = next
+	guide.set_weather(weather)
 
 
 func _palette_of(name: String) -> String:
@@ -436,6 +460,10 @@ func _build_state() -> Dictionary:
 		"gauge": gauge,
 		"hit": _current_hit,
 		"daypart": daypart,
+		"weather": weather,
+		"weather_shows": schema.weather_shows(weather),
+		"present_count": sim.count_present(),
+		"total_count": sim.animals.size(),
 		"active_count": sim.count_active(),
 		"shallow_count": sim.count_shallow(),
 		"companions": _companion_status(),

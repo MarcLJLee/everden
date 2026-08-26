@@ -142,6 +142,16 @@ static func _validate_species(species: Dictionary, schema: TagSchema, result: Re
 		result.warn("%s.sprite_set.%s = '%s' 는 모르는 값입니다 → '%s' 로 대체했습니다"
 			% [id, field, value, fallback])
 
+	# presence — 종이 활동 조건을 직접 들 수 있다. 키와 범위를 본다.
+	for daypart in species.get("presence", {}):
+		var known := schema.dayparts()
+		if not known.is_empty() and not (String(daypart) in known):
+			result.error("%s.presence 에 모르는 시간대 '%s' 가 있습니다 (가능: %s)"
+				% [id, daypart, ", ".join(PackedStringArray(known))])
+		var chance := float(species["presence"][daypart])
+		if chance < 0.0 or chance > 1.0:
+			result.error("%s.presence.%s = %s 는 0~1 이어야 합니다" % [id, daypart, chance])
+
 	# 규칙 4 — size_class 파생 불일치는 경고까지만 (수동 오버라이드 허용)
 	var adult_size := String(species.get("size", {}).get("adult", ""))
 	var derived := schema.derive_size_class(adult_size)

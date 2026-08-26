@@ -17,6 +17,10 @@ class WildAnimal extends RefCounted:
 	var invited := false
 	## 지난 프레임에 눈에 보였는가. 사라지는 순간을 잡아 이펙트를 띄우는 데 쓴다.
 	var was_visible := false
+	## 지금 시간대에 필드에 나와 있는가. 밤에만 나오는 동물이 낮에 없는 것이 이것이다.
+	var present := true
+	## 개체마다 한 번 굴린 값. 시간대가 바뀔 때 이 값으로 다시 판정한다.
+	var presence_roll := 0.0
 
 	func is_active() -> bool:
 		return actor != null
@@ -61,6 +65,7 @@ func spawn(target_species: Array, player_position: Vector2) -> void:
 			animal.position = _spawn_point(species, player_position, min_distance)
 			animal.velocity = _random_velocity()
 			animal.turn_timer = _rng.randf_range(1.0, 4.0)
+			animal.presence_roll = _rng.randf()
 			animals.append(animal)
 
 
@@ -76,7 +81,7 @@ func _spawn_point(species: Dictionary, player_position: Vector2, min_distance: f
 func update(delta: float, player_position: Vector2) -> void:
 	var activation_px := _promotion_px
 	for animal in animals:
-		if animal.invited:
+		if animal.invited or not animal.present:
 			continue
 		_wander(animal, delta)
 		var distance := animal.position.distance_to(player_position)
@@ -133,10 +138,38 @@ func invite(animal: WildAnimal) -> void:
 		_demote(animal)
 
 
+## 시간대가 바뀌면 누가 나와 있는지 다시 정한다.
+## 사라지는 것들은 노드를 내린다 — 낮에 박쥐가 서 있으면 안 된다.
+## 방금 사라진/나타난 것들을 돌려준다 (먼지 이펙트를 띄우기 위해).
+func apply_daypart(schema: TagSchema, daypart: String) -> Array:
+	var changed: Array = []
+	for animal in animals:
+		if animal.invited:
+			continue
+		var chance := schema.presence_chance(animal.species, daypart)
+		var present := animal.presence_roll < chance
+		if present == animal.present:
+			continue
+		changed.append({"animal": animal, "present": present, "was_visible": animal.was_visible})
+		animal.present = present
+		if not present and animal.is_active():
+			_demote(animal)
+		animal.was_visible = false
+	return changed
+
+
+func count_present() -> int:
+	var total := 0
+	for animal in animals:
+		if animal.present and not animal.invited:
+			total += 1
+	return total
+
+
 func active_animals() -> Array[WildAnimal]:
 	var out: Array[WildAnimal] = []
 	for animal in animals:
-		if animal.is_active() and not animal.invited:
+		if animal.is_active() and animal.present and not animal.invited:
 			out.append(animal)
 	return out
 
@@ -148,7 +181,7 @@ func count_active() -> int:
 func count_shallow() -> int:
 	var total := 0
 	for animal in animals:
-		if not animal.is_active() and not animal.invited:
+		if not animal.is_active() and animal.present and not animal.invited:
 			total += 1
 	return total
 

@@ -325,6 +325,9 @@ func _test_boot() -> void:
 	await process_frame
 	_check("타이틀 메뉴에 CONTINUE 가 없다 (세이브가 없으므로)",
 		not ("CONTINUE" in title._items), str(title._items))
+	# 데모 빌드는 새 게임이 아니라 필드 한 조각을 보여준다 — 없는 것을 약속하지 않는다
+	_check("데모 빌드의 첫 항목은 DEMO 다",
+		title.demo_build and title._items[0] == "DEMO", str(title._items))
 	_check("타이틀이 종의 habitat 에서 지형을 뽑는다",
 		title.terrain.at_tile(Vector2i(2, 2)) in _species_habitats(title))
 	_check("확인 창의 기본 선택은 안전한 쪽",

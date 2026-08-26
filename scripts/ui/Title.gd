@@ -15,6 +15,10 @@ const TUNING_PATH := "res://tuning/field_tuning.tres"
 const ACTOR_SCENE := "res://scenes/actors/Actor.tscn"
 const HANGUL_FONT := "res://fonts/Galmuri11.ttf"
 
+## 데모 빌드인가. 켜면 첫 항목이 DEMO 가 되고 바로 필드로 들어간다.
+## title.json 에 items_demo 가 생기면 그쪽을 쓴다.
+@export var demo_build := true
+
 ## 켜는 순간마다 배경이 달라야 하므로 시드를 고정하지 않는다.
 @onready var _world: Node2D = $World
 @onready var _ground: Node2D = $World/Ground
@@ -208,7 +212,10 @@ func _point(at) -> Vector2:
 func _build_menu() -> void:
 	var menu: Dictionary = data.get("menu", {})
 	_items = menu.get("items_first_run", ["NEW GAME", "EXIT"]).duplicate()
-	# 설정할 것이 생기기 전까지 SETTING 은 내리지 않는다 — 전체화면은 지금도 된다
+	if demo_build:
+		# 데모 빌드에서는 첫 항목이 DEMO 다. 새 게임이 아니라 **필드 한 조각**을 보여주는 것이라
+		# NEW GAME 이라고 적으면 없는 것을 약속하게 된다 (세이브도 사파리 층도 아직 없다).
+		_items = menu.get("items_demo", ["DEMO", "SETTING", "EXIT"]).duplicate()
 	_selected = 0
 
 
@@ -302,7 +309,7 @@ func _activate(item: String) -> void:
 				_ask("new_game", item)
 			else:
 				get_tree().change_scene_to_file(FIELD_SCENE)
-		"CONTINUE":
+		"CONTINUE", "DEMO":
 			get_tree().change_scene_to_file(FIELD_SCENE)
 		"SETTING":
 			_state = State.SETTING

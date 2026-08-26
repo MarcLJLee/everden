@@ -140,4 +140,6 @@ func _leave() -> void:
 	if _leaving:
 		return
 	_leaving = true
-	get_tree().change_scene_to_file(FIELD_SCENE)
+	# _ready 안에서 부를 수도 있다 (로고 파일이 없을 때). 그때 바로 바꾸면
+	# "Parent node is busy adding/removing children" 로 터진다.
+	get_tree().change_scene_to_file.call_deferred(FIELD_SCENE)

@@ -5,8 +5,8 @@ config_version=5
 
 [application]
 
-config/name="safari-demo1"
-config/description="Demo 1: 필드 슬라이스 — DEMO-SPEC.md 참조"
+config/name="EVERDEN"
+config/description="EVERDEN — Demo 1: 필드 슬라이스"
 run/main_scene="res://scenes/ui/Boot.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 
@@ -87,4 +87,7 @@ debug_reset_run={
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 textures/canvas_textures/default_texture_filter=0
+; arm64·universal 로 굽으려면 켜져 있어야 한다. 2D 텍스처는 무손실로 임포트되므로
+; 도트가 뭉개지지는 않는다 — VRAM 압축을 쓰는 텍스처에만 적용된다.
+textures/vram_compression/import_etc2_astc=true
 2d/snap/snap_2d_transforms_to_pixel=false

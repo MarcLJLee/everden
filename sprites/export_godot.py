@@ -12,6 +12,8 @@ from PIL import Image
 import build as A
 import build_bg as G
 import build_logo as L
+import build_title as TI
+import build_home as HM
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "extracted")
 
@@ -33,7 +35,8 @@ def w(path, im):
 # ★ 예전에 `shutil.rmtree(OUT)` 였다. 그러면 이 스크립트가 만들지 않는 것 —
 #   구현 세션이 내보낸 `extracted/player/` 37장 — 이 통째로 사라진다.
 #   생성기는 자기가 쓰는 자리만 지운다.
-OWNED = ("dog", "cat", "squirrel", "shared", "terrain", "props", "clues", "food", "ui")
+OWNED = ("dog", "cat", "squirrel", "shared", "terrain", "props", "clues",
+         "food", "ui", "home")
 
 def clear_owned():
     """소유 폴더의 png·json 만 지운다.
@@ -131,8 +134,12 @@ def main():
     for name, c in G.CLUES.items():   w(f"{OUT}/clues/{name}.png", c.img(day))
     for name, c in G.FOODS.items():   w(f"{OUT}/food/{name}.png", c.img(day))
 
-    # ── UI — 제작사 로고 (부팅 화면) ─────────────────────────────────
+    # ── UI — 제작사 로고 · 타이틀 · 커서 ─────────────────────────────
     L.save_all()
+    TI.save_all()
+
+    # ── 집 — 건물 · 울타리 · 사물 ─────────────────────────────────────
+    HM.save_all()
 
     # ── 팔레트 — 밤낮은 이 값들을 보간해서 만든다 ────────────────────
     def rgba(p): return [list(G._rgba(x)) for x in p]
@@ -152,12 +159,7 @@ def main():
                      "눈 레이어를 몸통과 같은 팔레트 셰이더에 통과시키면 "
                      "검은 털 팔레트에서 눈이 저절로 밝아진다 — 흰 테를 두르지 않는다."),
         "terrain_variants": {k: len(v) for k, v in terrain.items()},
-        "prop_terrain": {
-            "초원": ["tuft","flowers","rock","pebbles","bigrock","bush"],
-            "숲":   ["tree","conifer","deadtree","stump","mushroom","log","bush","thornbush","branch"],
-            "물가": ["reed","pebbles","mud","tuft"],
-            "바위": ["bigrock","rock","pebbles","deadtree"],
-        },
+        "prop_terrain": G.PROP_TERRAIN,
         "clue_by_trait": {k: f"clues/{k}.png" for k in
                           ("발자국","큰발자국","나무흔적","물자국","허물","털")},
         "clue_airborne": {"후각": "clues/냄새표시.png", "청각": "clues/소리표시.png"},

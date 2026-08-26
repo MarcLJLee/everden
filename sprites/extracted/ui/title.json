@@ -1,0 +1,313 @@
+{
+  "_comment": "타이틀 화면. 배경은 필드를 그대로 그리고 이 조각들을 위에 얹는다.",
+  "canvas": [
+    640,
+    360
+  ],
+  "title_mark": "ui/title_mark.png",
+  "title_mark_at": [
+    101,
+    46
+  ],
+  "title_grass": "ui/title_grass.png",
+  "title_grass_at": [
+    61,
+    46
+  ],
+  "background": {
+    "mode": "random_terrain",
+    "rule": "켤 때마다 지형을 무작위로 고르고 **그 지형에 사는 종**을 세운다. 타이틀 화면 자체가 단서다 — 글로 알려주지 않는다",
+    "terrain_from": "animals.json 의 habitat[] 중 하나",
+    "daypart_from": "animals.json 의 activity",
+    "daypart": {
+      "주행성": 0.3,
+      "야행성": 0.86,
+      "박명성": 0.62
+    },
+    "tiles": "terrain/<지형>.png (변형은 palettes.json 의 terrain_variants)",
+    "props": "palettes.json 의 prop_terrain",
+    "prop_count": {
+      "초원": 44,
+      "숲": 62,
+      "물가": 46,
+      "바위": 46
+    },
+    "dim": 0.58,
+    "scrim": "아래로 갈수록 어둡게. 지형마다 밝기가 달라서 없으면 어떤 지형에선 안 읽힌다",
+    "warning": "지형과 종이 어긋나면 틀린 것을 가르친다. 반드시 habitat 에서 뽑을 것"
+  },
+  "companion": {
+    "rule": "게임을 켤 때마다 하나를 무작위로 고른다. 배경 지형이 먼저다",
+    "pool": "data/animals.json 의 모든 종 × 모든 growth 단계",
+    "anchor": [
+      515,
+      159
+    ],
+    "anchor_origin": "왼쪽 아래 — 종마다 키가 달라서 발을 기준으로 붙인다",
+    "scale": 2,
+    "fallback": {
+      "species": "dog",
+      "stage": "adult"
+    },
+    "label": {
+      "name": "이름만 적는다. 사는 곳은 배경이 말한다",
+      "always": "도감에 없어도 이름은 보여준다 — 미끼는 이름이다",
+      "reveal": {
+        "on_hover": true,
+        "idle_ms": 2000
+      },
+      "input_parity": "마우스에서만 얻는 정보를 만들지 않는다. 기본 조작은 WASD/패드고 마우스는 더 빠를 뿐이다",
+      "anchor": [
+        475,
+        177
+      ],
+      "anchor_origin": "왼쪽 위"
+    },
+    "candidates": [
+      {
+        "species": "dog",
+        "name": "개",
+        "stage": "baby",
+        "sprite_set": "dog_baby",
+        "available": false,
+        "palettes": [],
+        "animation": "idle"
+      },
+      {
+        "species": "dog",
+        "name": "개",
+        "stage": "adult",
+        "sprite_set": "dog_adult",
+        "available": true,
+        "palettes": [
+          "dog_default",
+          "dog_cream",
+          "dog_black"
+        ],
+        "animation": "idle"
+      },
+      {
+        "species": "cat",
+        "name": "고양이",
+        "stage": "baby",
+        "sprite_set": "cat_baby",
+        "available": false,
+        "palettes": [],
+        "animation": "idle"
+      },
+      {
+        "species": "cat",
+        "name": "고양이",
+        "stage": "adult",
+        "sprite_set": "cat_adult",
+        "available": true,
+        "palettes": [
+          "cat_default",
+          "cat_ginger",
+          "cat_black"
+        ],
+        "animation": "special"
+      },
+      {
+        "species": "squirrel",
+        "name": "청설모",
+        "stage": "baby",
+        "sprite_set": "squirrel_baby",
+        "available": false,
+        "palettes": [],
+        "animation": "idle"
+      },
+      {
+        "species": "squirrel",
+        "name": "청설모",
+        "stage": "adult",
+        "sprite_set": "squirrel_adult",
+        "available": true,
+        "palettes": [
+          "squirrel_default",
+          "squirrel_rare"
+        ],
+        "animation": "idle"
+      },
+      {
+        "species": "raccoon_dog",
+        "name": "너구리",
+        "stage": "baby",
+        "sprite_set": "raccoon_dog_baby",
+        "available": false,
+        "palettes": [],
+        "animation": "idle"
+      },
+      {
+        "species": "raccoon_dog",
+        "name": "너구리",
+        "stage": "adult",
+        "sprite_set": "raccoon_dog_adult",
+        "available": false,
+        "palettes": [],
+        "animation": "idle"
+      },
+      {
+        "species": "otter",
+        "name": "수달",
+        "stage": "baby",
+        "sprite_set": "otter_baby",
+        "available": false,
+        "palettes": [],
+        "animation": "idle"
+      },
+      {
+        "species": "otter",
+        "name": "수달",
+        "stage": "adult",
+        "sprite_set": "otter_adult",
+        "available": false,
+        "palettes": [],
+        "animation": "idle"
+      },
+      {
+        "species": "water_deer",
+        "name": "고라니",
+        "stage": "baby",
+        "sprite_set": "water_deer_baby",
+        "available": false,
+        "palettes": [],
+        "animation": "idle"
+      },
+      {
+        "species": "water_deer",
+        "name": "고라니",
+        "stage": "adult",
+        "sprite_set": "water_deer_adult",
+        "available": false,
+        "palettes": [],
+        "animation": "idle"
+      },
+      {
+        "species": "leopard_cat",
+        "name": "삵",
+        "stage": "baby",
+        "sprite_set": "leopard_cat_baby",
+        "available": false,
+        "palettes": [],
+        "animation": "idle"
+      },
+      {
+        "species": "leopard_cat",
+        "name": "삵",
+        "stage": "adult",
+        "sprite_set": "leopard_cat_adult",
+        "available": false,
+        "palettes": [],
+        "animation": "idle"
+      },
+      {
+        "species": "toad",
+        "name": "두꺼비",
+        "stage": "baby",
+        "sprite_set": "toad_baby",
+        "available": false,
+        "palettes": [],
+        "animation": "idle"
+      },
+      {
+        "species": "toad",
+        "name": "두꺼비",
+        "stage": "adult",
+        "sprite_set": "toad_adult",
+        "available": false,
+        "palettes": [],
+        "animation": "idle"
+      },
+      {
+        "species": "magpie",
+        "name": "까치",
+        "stage": "baby",
+        "sprite_set": "magpie_baby",
+        "available": false,
+        "palettes": [],
+        "animation": "idle"
+      },
+      {
+        "species": "magpie",
+        "name": "까치",
+        "stage": "adult",
+        "sprite_set": "magpie_adult",
+        "available": false,
+        "palettes": [],
+        "animation": "idle"
+      },
+      {
+        "species": "sparrow",
+        "name": "참새",
+        "stage": "baby",
+        "sprite_set": "sparrow_baby",
+        "available": false,
+        "palettes": [],
+        "animation": "idle"
+      },
+      {
+        "species": "sparrow",
+        "name": "참새",
+        "stage": "adult",
+        "sprite_set": "sparrow_adult",
+        "available": false,
+        "palettes": [],
+        "animation": "idle"
+      },
+      {
+        "species": "snake",
+        "name": "뱀",
+        "stage": "baby",
+        "sprite_set": "snake_baby",
+        "available": false,
+        "palettes": [],
+        "animation": "idle"
+      },
+      {
+        "species": "snake",
+        "name": "뱀",
+        "stage": "adult",
+        "sprite_set": "snake_adult",
+        "available": false,
+        "palettes": [],
+        "animation": "idle"
+      }
+    ]
+  },
+  "menu": {
+    "text_x": 292,
+    "cursor_x": 250,
+    "top": 228,
+    "gap": 29,
+    "selected_offset_x": 6,
+    "cursor": "ui/cursor_paw.png",
+    "items_with_save": [
+      "CONTINUE",
+      "NEW GAME",
+      "SETTING",
+      "EXIT"
+    ],
+    "items_first_run": [
+      "NEW GAME",
+      "SETTING",
+      "EXIT"
+    ]
+  },
+  "font": {
+    "latin": "5×7 자체 비트맵 (엔진 쪽에서 다시 만들 것)",
+    "hangul": "fonts/Galmuri11.ttf — 11px 로 찍고 정수배로만 키운다",
+    "hangul_note": "임포트에서 안티에일리어싱·힌팅·서브픽셀을 끄지 않으면 흐려진다"
+  },
+  "confirm": {
+    "only_for": "되돌릴 수 없는 동작만",
+    "default_choice": "safe",
+    "new_game": [
+      "지금까지 만든 사파리가 사라져요.",
+      "그래도 새로 시작할까요?"
+    ],
+    "exit": [
+      "게임을 끝낼까요?"
+    ]
+  }
+}

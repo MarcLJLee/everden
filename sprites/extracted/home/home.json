@@ -1,0 +1,116 @@
+{
+  "_comment": "집(사파리 층)의 조각. 사물은 **새 태그를 만들지 않는다** — tags.json 에 이미 있는 값을 가리키고, 그 태그를 가진 동물이 쓴다.",
+  "tile_size": 16,
+  "house": {
+    "file": "home/house.png",
+    "size": [
+      96,
+      80
+    ],
+    "door_x": 48,
+    "anchor": "바닥 중앙"
+  },
+  "fence": {
+    "h": "home/fence_h.png",
+    "v": "home/fence_v.png",
+    "gate": "home/fence_gate.png"
+  },
+  "objects": {
+    "공": {
+      "file": "home/obj_공.png",
+      "size": [
+        14,
+        14
+      ],
+      "for_tags": [
+        "호기심",
+        "대담함"
+      ],
+      "price": 40,
+      "anchor": "바닥 중앙"
+    },
+    "밥그릇": {
+      "file": "home/obj_밥그릇.png",
+      "size": [
+        18,
+        12
+      ],
+      "for_tags": [
+        "잡식",
+        "육식",
+        "초식"
+      ],
+      "price": 20,
+      "anchor": "바닥 중앙"
+    },
+    "물그릇": {
+      "file": "home/obj_물그릇.png",
+      "size": [
+        18,
+        12
+      ],
+      "for_tags": [],
+      "price": 20,
+      "anchor": "바닥 중앙"
+    },
+    "긁는기둥": {
+      "file": "home/obj_긁는기둥.png",
+      "size": [
+        18,
+        34
+      ],
+      "for_tags": [
+        "나무선호"
+      ],
+      "price": 60,
+      "anchor": "바닥 중앙"
+    },
+    "그늘막": {
+      "file": "home/obj_그늘막.png",
+      "size": [
+        40,
+        30
+      ],
+      "for_tags": [
+        "겁많음"
+      ],
+      "price": 80,
+      "anchor": "바닥 중앙"
+    },
+    "웅덩이": {
+      "file": "home/obj_웅덩이.png",
+      "size": [
+        30,
+        16
+      ],
+      "for_tags": [
+        "물가선호"
+      ],
+      "price": 50,
+      "anchor": "바닥 중앙"
+    },
+    "방석": {
+      "file": "home/obj_방석.png",
+      "size": [
+        20,
+        12
+      ],
+      "for_tags": [],
+      "price": 30,
+      "anchor": "바닥 중앙"
+    }
+  },
+  "rules": {
+    "no_upkeep": "사물은 고장나지 않고 유지비가 없다. 한 번 사면 끝이다",
+    "no_new_enum": "for_tags 의 값은 전부 tags.json 에 이미 있다",
+    "no_new_animation": "사물이 새 동작을 요구하지 않는다. 동물의 기존 idle_animation 이 사물 옆에서 재생된다 — 종×사물로 동작을 만들면 스프라이트가 곱셈으로 터진다",
+    "match": "for_tags 가 비어 있으면 누구나 쓴다. 아니면 하나라도 겹치는 동물이 쓴다"
+  },
+  "hud": {
+    "items": [
+      "재화",
+      "자리"
+    ],
+    "note": "배고픔·청결·기분 게이지를 두지 않는다. 집은 해야 하는 곳이 아니다"
+  }
+}

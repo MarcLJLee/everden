@@ -1,0 +1,82 @@
+{
+  "_comment": "제작사 로고 부팅 화면. 좌표는 스프라이트의 좌상단 기준, 캔버스 640×360.",
+  "canvas": [
+    640,
+    360
+  ],
+  "background": [
+    14,
+    15,
+    19
+  ],
+  "wordmark": "ui/logo_wordmark.png",
+  "wordmark_at": [
+    229,
+    128
+  ],
+  "paw_big": "ui/logo_paw_big.png",
+  "paw_small": "ui/logo_paw_small.png",
+  "big": [
+    [
+      40,
+      252
+    ],
+    [
+      118,
+      238
+    ],
+    [
+      196,
+      240
+    ],
+    [
+      274,
+      226
+    ],
+    [
+      352,
+      228
+    ],
+    [
+      430,
+      214
+    ],
+    [
+      508,
+      216
+    ]
+  ],
+  "small": [
+    [
+      196,
+      307
+    ],
+    [
+      258,
+      295
+    ],
+    [
+      320,
+      297
+    ],
+    [
+      382,
+      285
+    ],
+    [
+      444,
+      287
+    ]
+  ],
+  "timing": {
+    "frames": 32,
+    "frame_ms": 80,
+    "big_from": 3,
+    "big_every": 2,
+    "small_from": 11,
+    "small_every": 2,
+    "mark_from": 17,
+    "mark_fade_frames": 7
+  },
+  "skippable": true
+}

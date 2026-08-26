@@ -1,0 +1,139 @@
+=== 설계 세션 → 구현 세션 회신 ===
+
+요청대로 **조각 + 좌표**로 바꿨다. 합성 스틸은 검수용으로만 남긴다.
+
+## 로고 — extracted/ui/
+
+  logo_paw_big.png     발자국 한 짝 (큰 것, 32×22)
+  logo_paw_small.png   발자국 한 짝 (작은 것, 22×18)
+  logo_wordmark.png    RUN II
+  logo.json            좌표 + 타이밍
+  logo_screen.png      합성본 — 검수용. 게임에서 읽지 말 것
+
+`logo.json` 은 요청한 형식에 셋을 더 넣었다.
+
+  frame_ms         80  (32프레임 × 80ms = 2.56초). fps 대신 ms 로 준다 — 12.5fps 라 반올림하면 어긋난다
+  background       [14,15,19]  순검정이 아니다. 워드마크 외곽선이 살아야 해서
+  mark_fade_frames 이름만 바꿨다 (mark_over → 명확하게)
+
+타이밍 상수는 `build_logo.py` 상단 한 곳에만 있고 json 으로 그대로 나간다.
+좌표는 **스프라이트 좌상단 기준**이다.
+
+## 타이틀 — extracted/ui/ (새로 나감)
+
+  title_mark.png       EVERDEN 워드마크
+  title_grass.png      글자 발밑 풀·꽃 (동무와 분리했다 — 동무만 갈아끼울 수 있게)
+  cursor_paw.png       메뉴 커서
+  title.json           위치 · 동무 후보 · 메뉴 좌표 · 확인 창 문구
+  title_screen.png     합성본 — 검수용
+
+**동무는 켤 때마다 바뀐다.** 풀은 `data/animals.json` 의 모든 종 × 모든 growth 단계다.
+종을 코드에 적지 말고 `title.json` 의 `companion.candidates` 를 그대로 읽을 것.
+
+  anchor          [x, y]  — **왼쪽 아래 기준**. 종마다 키가 달라서 발을 기준으로 붙인다
+  scale           2
+  candidates[]    available:false 인 것은 스프라이트가 아직 없다 (22칸 중 3칸만 true)
+  fallback        개 성체 — 첫 실행이거나 뽑은 것이 없을 때
+
+지금 available 인 셋은 dog_adult · cat_adult · squirrel_adult 이고,
+**아기 스프라이트는 한 장도 없다.** 그려지는 만큼 available 이 늘어난다.
+고양이만 `animation: "special"`(앉아서 앞발 든 프레임)이고 나머지는 idle 이다.
+
+`menu` 블록에 좌표를 다 넣었으니 화면 좌표를 코드에 박지 말 것.
+
+## 폰트
+
+`fonts/Galmuri11.ttf` (SIL OFL 1.1). 배포물에 `LICENSE-Galmuri.txt` 를 함께 넣어야 한다.
+
+**11px 로 찍고 정수배로만 키운다.** 22px 로 바로 찍으면 힌팅이 개입해 획이 흔들린다.
+임포트에서 Antialiasing · Hinting · Subpixel Positioning · Mipmaps · MSDF 를 전부 꺼야
+640×360 을 정수배로 늘렸을 때 글자만 흐려지지 않는다. 자세한 것은 `fonts/README.md`.
+
+한글은 확인 창에만 쓴다. 메뉴는 영문이고 5×7 비트맵인데, `build_title.py` 의 `FONT5`
+딕셔너리가 그 폰트다 — 엔진 쪽에서 다시 만들든 갈무리로 대체하든 그쪽 판단에 맡긴다.
+
+## 브리프
+
+v3.1 §6.7 에 전부 반영했다. 타이틀 동무 풀을 도감으로 좁힐지는 §7 미결로 올렸다.
+
+---
+
+## 추가 (이름표)
+
+`title.json` 의 `companion.label` 이 늘었다.
+
+  reveal        {on_hover: true, idle_ms: 2000}
+  anchor        [475, 177]  — 왼쪽 위 기준
+  name          항상 그린다. 도감에 없어도
+  habitat       도감에 기록된 종만. 없으면 unknown_text
+  habitat_tile  지형 이름 → terrain/extra 의 타일 키
+
+**마우스 전용 정보를 만들지 말 것.** 호버하면 즉시, 아무 입력이 없으면 2초 뒤에
+같은 이름표가 뜬다. 패드로 하는 아이가 못 보는 정보가 있으면 안 된다.
+이 규칙은 타이틀만이 아니라 앞으로 만들 모든 화면에 걸린다 — `CLAUDE.md` 에도 넣었다.
+
+이름은 미끼고 장소는 정답이라 갈랐다. 어디 사는지를 알아내는 것이 §3.3/§3.6 의
+핵심 루프인데 타이틀에서 공짜로 알려주면 게임 밖에서 정답을 주는 셈이다.
+
+미결 하나 남겼다 (§7): **도감이 "어디서 만났는지"를 기록하는가.**
+지금은 `habitat` 태그 전부를 보여주는데, 실제로 만난 지형만 보여줄 수도 있다.
+후자면 도감에 필드가 하나 필요하다 — 그건 그쪽 소유라 정해서 알려주면 반영하겠다.
+
+---
+
+## 다시 (배경이 무작위 지형이 됐다)
+
+이름표에서 사는 곳을 빼고 **배경이 그 일을 하게 바꿨다.** 글로 알려주는 대신
+지형을 깔고 거기 사는 동물을 세운다 — 화면 자체가 단서다. 글을 못 읽어도 통한다.
+
+`title.json` 에 `background` 블록이 생겼다.
+
+  mode          "random_terrain"
+  terrain_from  animals.json 의 habitat[] 중 하나
+  daypart_from  animals.json 의 activity
+  daypart       {주행성: 0.30, 야행성: 0.86, 박명성: 0.62}   ← 하루 위치 u
+  tiles         terrain/<지형>.png  (변형 개수는 palettes.json 의 terrain_variants)
+  props         palettes.json 의 prop_terrain
+  prop_count    지형별 프롭 개수 — 숲은 빽빽해야 숲으로 읽힌다
+  dim / scrim   0.58 곱하고 아래로 갈수록 어둡게
+
+**순서가 중요하다: 지형을 먼저 고르고, 그 지형에 사는 종을 고른다.**
+반대로 하면(종을 먼저 고르고 habitat 중 아무거나) 결과는 같지만,
+어느 쪽이든 **habitat 에서 뽑아야 한다.** 수달을 초원에 세우면 틀린 것을 가르친다.
+
+`companion.label` 에서 habitat 관련 필드를 뺐다. 이제 이름만 그린다.
+
+`palettes.json` 의 `prop_terrain` 은 `build_bg.PROP_TERRAIN` 한 곳에서 나온다.
+전에는 export_godot.py 안에 따로 적혀 있어서 출처가 둘이었다 — 합쳤다.
+
+타이틀 배경은 지금 **단일 지형을 타일로 채우는 간단한 생성기**다. 실제 필드 생성이
+자리를 잡으면 하나로 합치는 게 나을 수 있어서 §7 에 미결로 올렸다.
+
+---
+
+## 집 (사파리 층) — extracted/home/ 새로 나감
+
+타이틀에서 CONTINUE / NEW GAME 을 고르면 **필드가 아니라 집**으로 들어온다.
+`Boot.tscn` 다음이 필드가 아니라 집이 된다 — 진입 흐름이 바뀐다.
+
+  house.png            96×80. 앵커 바닥 중앙. 문 한가운데가 대문과 같은 x
+  fence_h/v/gate.png   울타리 · 대문 (대문은 **열려 있다**)
+  obj_*.png            사물 7종
+  home.json            사물의 for_tags · 값 · 규칙
+
+**사물은 새 태그를 만들지 않는다.** `for_tags` 의 값이 전부 `tags.json` 에 이미 있다
+(temperament · behavior_tags · diet). 그 태그를 가진 동물이 그 사물을 쓰고,
+비어 있으면 누구나 쓴다. 종 이름으로 분기할 자리가 없다.
+
+**⚠️ 사물이 새 동작을 요구하지 않는다.** 여기서 스프라이트가 곱셈으로 터질 수 있다 —
+7종 × 7사물 = 49벌. 절대 그렇게 가지 말 것. **사물 옆에서 그 동물의 기존
+`idle_animation` 이 재생된다.** 사물은 자리와 태그만 제공하고 동작은 동물이 들고 온다.
+이 규칙이 종당 장수(§4.5 16장)를 사물 수와 무관하게 묶는다.
+
+**HUD 는 재화와 자리 둘뿐이다.** 배고픔·청결·기분 게이지를 두지 말 것.
+그게 생기는 순간 집이 할 일 목록이 되고 §"수집이 벌이 되면 안 된다" 위반이다.
+사물도 고장나지 않고 유지비가 없다 — 한 번 사면 끝.
+
+브리프 v3.2 §2.7 에 전부 적었다. 미결로 둘 올렸다:
+  · 사물을 어디서 사고 어떻게 놓는가 (상점 화면 / 배치 방식)
+  · 동물이 사물로 걸어가는 빈도와 순서 — 아이가 "쟤가 공 갖고 논다"를 알아볼 만큼은 잦아야 한다

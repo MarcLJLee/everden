@@ -6,13 +6,14 @@
 
 | 파일 | 용도 |
 |---|---|
-| `PROJECT-BRIEF.md` | **단일 기준 문서 (v3).** 설계 질문에 답하기 전에 먼저 읽을 것 |
+| `PROJECT-BRIEF.md` | **단일 기준 문서 (v3.2).** 설계 질문에 답하기 전에 먼저 읽을 것 |
 | `HANDOFF.md` | 아트 인계 규약 — `sprites/extracted/` 를 어떻게 물리는가 |
 | `RUN.md` | 실행 · 조작 · 검증 |
 | `DEMO-SPEC.md` | 지금 만들 것 — Demo 1(필드 슬라이스)의 구현 사양과 완료 조건 |
 | `data/tags.json` | 태그 스키마. 열거형 정의, 파생 규칙, 캔버스 버킷 |
 | `data/animals.json` | 종(class) 정의 8개. 개체가 아니다 |
 | `sprites/extracted/` | 게임이 읽는 아트. `sprites/*.py` 가 생성한다 |
+| `fonts/` | 갈무리 11 (OFL 1.1). **11px 로 찍고 정수배로만 키운다** |
 | `project-instructions.md` | 대화형 프로젝트 지침 (Claude 프로젝트 custom instructions용) |
 
 ## 문서를 낡게 두지 않는다
@@ -35,6 +36,7 @@
 | `sprites/*.py` (생성기) | 설계 세션 | 고치지 말고 **변경분을 블록으로 넘긴다** |
 | `sprites/extracted/` | 그 파일을 내보낸 스크립트 | 남의 폴더를 지우지 않는다 |
 | `data/*.json` | 구현 세션 | 값을 바꾸려면 이유와 함께 요청한다 |
+| `fonts/` | 파일은 설계 세션 · **임포트 설정은 구현 세션** | `fonts/README.md` 참조 |
 | `scripts/`, `scenes/`, `tuning/` | 구현 세션 | 읽기만 |
 | `PROJECT-BRIEF.md`, `HANDOFF.md`, `DEMO-SPEC.md` | 설계 세션 | 낡은 곳을 지적한다 |
 | `RUN.md` | 구현 세션 | |
@@ -70,6 +72,9 @@
 - **이동은 4방향, 대기는 좌우 2방향, 특징 동작은 측면 1방향.** (BRIEF §4.5)
 - **튜닝 상수를 코드에 박지 않는다.** `tuning/*.tres`로 빼서 리모트 인스펙터로 만진다.
 - **텍스처 필터는 Nearest, 밉맵 끄기.** 이펙트 레이어만 Linear + 자유 좌표. (BRIEF §6.2)
+- **마우스에서만 얻는 정보를 만들지 않는다.** 기본 조작은 WASD/패드다. 툴팁은
+  호버하면 즉시, 아무 입력이 없으면 몇 초 뒤에 — 마우스는 더 빠를 뿐이다. (BRIEF §6.7)
+- **갈무리는 11px 로 찍고 정수배로만 키운다.** 22px 로 바로 찍으면 획이 흔들린다.
 
 ## 툴 정책
 

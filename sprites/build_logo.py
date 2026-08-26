@@ -162,7 +162,6 @@ def paw(big, scale=2):
     return im.resize((m.width*scale, m.height*scale), Image.NEAREST)
 
 N_BIG, N_SMALL = 7, 5
-SMALL_FROM = 2              # 어른이 두 걸음 혼자 걷다가 이 걸음부터 아이가 붙는다
 
 def _big_at(i):
     """왼쪽 아래에서 오른쪽으로 올라가며 — 화면 밖에서 걸어 들어온다.
@@ -193,28 +192,69 @@ def screen(n_big=N_BIG, n_small=N_SMALL, mark_alpha=1.0, tag=None):
         if mark_alpha < 1.0:
             a = wm.getchannel("A").point(lambda v: int(v*mark_alpha))
             wm.putalpha(a)
-        im.alpha_composite(wm, ((W - wm.width)//2, 128))
+        im.alpha_composite(wm, ((W - wm.width)//2, MARK_AT))
     return im
 
 
-FRAMES = 32
+# 타이밍은 여기 한 곳에만 있다. `logo.json` 으로 그대로 나가서 엔진이 같은 값을 읽는다 —
+# 좌표와 타이밍이 데이터로 나오면 로고를 다시 그려도 엔진 코드를 안 고친다.
+FRAMES      = 32
+FRAME_MS    = 80        # 32 × 80ms = 2.56초
+BIG_FROM    = 3
+BIG_EVERY   = 2
+SMALL_FROM  = 11
+SMALL_EVERY = 2
+MARK_FROM   = 17
+MARK_OVER   = 7
+MARK_AT     = 128       # 워드마크 윗변 y (x 는 가운데 정렬)
+
 def sequence():
     """2.5초. 아무 키나 누르면 건너뛴다 — 아이는 이 화면을 수백 번 본다."""
     out = []
     for f in range(FRAMES):
-        nb = max(0, min(N_BIG, (f - 3) // 2))
-        ns = max(0, min(N_SMALL, (f - 11) // 2))
-        a  = 0.0 if f < 17 else min(1.0, (f - 17) / 7)
+        nb = max(0, min(N_BIG, (f - BIG_FROM) // BIG_EVERY))
+        ns = max(0, min(N_SMALL, (f - SMALL_FROM) // SMALL_EVERY))
+        a  = 0.0 if f < MARK_FROM else min(1.0, (f - MARK_FROM) / MARK_OVER)
         out.append(screen(nb, ns, a))
     return out
 
 
 def save_all():
+    """조각 + 좌표/타이밍을 함께 내보낸다.
+    합성 스틸 한 장만 주면 엔진이 발자국을 따로 못 움직인다 — 32프레임을 통째로
+    굽는 것은 640×360 × 32장이라 낭비고, 조각과 좌표를 주면 엔진이 그린다.
+    지형·프롭·단서를 `palettes.json` 으로 넘긴 것과 같은 방식이다."""
+    import json
     d = os.path.join(OUT, "extracted", "ui")
     os.makedirs(d, exist_ok=True)
-    wordmark().save(os.path.join(d, "logo_wordmark.png"))
+    wm = wordmark()
+    wm.save(os.path.join(d, "logo_wordmark.png"))
     screen().save(os.path.join(d, "logo_screen.png"))
-    print("extracted/ui/logo_wordmark.png · logo_screen.png")
+    paw(True).save(os.path.join(d, "logo_paw_big.png"))
+    paw(False).save(os.path.join(d, "logo_paw_small.png"))
+
+    meta = {
+        "_comment": "제작사 로고 부팅 화면. 좌표는 스프라이트의 좌상단 기준, 캔버스 640×360.",
+        "canvas": [W, H],
+        "background": list(BG),
+        "wordmark": "ui/logo_wordmark.png",
+        "wordmark_at": [(W - wm.width)//2, MARK_AT],
+        "paw_big": "ui/logo_paw_big.png",
+        "paw_small": "ui/logo_paw_small.png",
+        "big":   [list(_big_at(i))   for i in range(N_BIG)],
+        "small": [list(_small_at(i)) for i in range(N_SMALL)],
+        "timing": {
+            "frames": FRAMES, "frame_ms": FRAME_MS,
+            "big_from": BIG_FROM, "big_every": BIG_EVERY,
+            "small_from": SMALL_FROM, "small_every": SMALL_EVERY,
+            "mark_from": MARK_FROM, "mark_fade_frames": MARK_OVER,
+        },
+        "skippable": True,
+    }
+    with open(os.path.join(d, "logo.json"), "w") as fp:
+        json.dump(meta, fp, ensure_ascii=False, indent=2)
+    print("extracted/ui/logo_wordmark.png · logo_screen.png · "
+          "logo_paw_big.png · logo_paw_small.png · logo.json")
 
 
 def sheet():

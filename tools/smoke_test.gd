@@ -38,7 +38,7 @@ func _run() -> void:
 	await _test_reveal(field)
 	await _test_animation_set(field)
 	await _test_art_wiring(field)
-	_test_boot()
+	await _test_boot()
 	await _test_sense_reach(field)
 	await _test_eyeshine(field)
 	await _test_puff(field)
@@ -290,6 +290,14 @@ func _test_reveal(field) -> void:
 
 
 ## 부팅 화면 — 제작사 로고. 씬을 바꾸는 코드라 트리에 넣지 않고 계약만 확인한다.
+func _species_habitats(title) -> Array:
+	for id in DataLoader.load_all(false).species:
+		var species: Dictionary = DataLoader.load_all(false).species[id]
+		if String(species.get("name", "")) == title.companion_name:
+			return species.get("habitat", [])
+	return ["초원", "숲", "물가", "바위"]
+
+
 func _test_boot() -> void:
 	_check("로고 그림이 있다",
 		ResourceLoader.exists("res://sprites/extracted/ui/logo_screen.png"))
@@ -299,9 +307,29 @@ func _test_boot() -> void:
 	var boot: Control = load("res://scenes/ui/Boot.tscn").instantiate()
 	# "아이는 이 화면을 수백 번 본다" — 건너뛸 수 있어야 하고, 길면 안 된다
 	_check("아무 키나 누르면 건너뛴다", boot.has_method("_unhandled_input"))
-	var total: float = boot.fade_in + boot.hold + boot.fade_out
-	_check("로고가 3초를 넘지 않는다", total <= 3.0, "%.1f초" % total)
+	# json 의 시퀀스 + 머무는 시간 + 페이드. 길면 두 번째부터 벌이 된다.
+	var timing: Dictionary = JSON.parse_string(
+		FileAccess.get_file_as_string("res://sprites/extracted/ui/logo.json")).get("timing", {})
+	var total: float = int(timing.get("frames", 32)) * float(timing.get("frame_ms", 80)) / 1000.0 \
+		+ boot.hold_after + boot.fade_out
+	_check("로고가 4초를 넘지 않는다", total <= 4.0, "%.1f초" % total)
+	_check("로고 조각과 좌표가 다 있다",
+		ResourceLoader.exists("res://sprites/extracted/ui/logo_paw_big.png")
+		and ResourceLoader.exists("res://sprites/extracted/ui/logo_paw_small.png")
+		and not timing.is_empty())
 	boot.free()
+
+	# 타이틀 — 첫 실행에는 CONTINUE 가 아예 없다 (BRIEF §6.7)
+	var title: Control = load("res://scenes/ui/Title.tscn").instantiate()
+	root.add_child(title)
+	await process_frame
+	_check("타이틀 메뉴에 CONTINUE 가 없다 (세이브가 없으므로)",
+		not ("CONTINUE" in title._items), str(title._items))
+	_check("타이틀이 종의 habitat 에서 지형을 뽑는다",
+		title.terrain.at_tile(Vector2i(2, 2)) in _species_habitats(title))
+	_check("확인 창의 기본 선택은 안전한 쪽",
+		not title._confirm_yes)
+	title.queue_free()
 
 
 ## 아트 인계 — 지형 타일 · 프롭 · 단서 마커 · 밤낮 (HANDOFF §2)

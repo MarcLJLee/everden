@@ -1,0 +1,63 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/Title.gd" id="1_title"]
+[ext_resource type="Script" path="res://scripts/field/Ground.gd" id="2_ground"]
+
+[node name="Title" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1_title")
+
+[node name="World" type="Node2D" parent="."]
+
+[node name="Ground" type="Node2D" parent="World"]
+script = ExtResource("2_ground")
+
+[node name="Props" type="Node2D" parent="World"]
+y_sort_enabled = true
+
+[node name="Dim" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0, 0, 0, 0.42)
+
+[node name="Scrim" type="TextureRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 1
+
+[node name="Mark" type="Sprite2D" parent="."]
+centered = false
+
+[node name="Grass" type="Sprite2D" parent="."]
+centered = false
+
+[node name="CompanionName" type="Label" parent="."]
+offset_right = 160.0
+offset_bottom = 20.0
+mouse_filter = 2
+
+[node name="Cursor" type="Sprite2D" parent="."]
+centered = false
+visible = false
+
+[node name="Menu" type="Control" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2

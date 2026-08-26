@@ -1,0 +1,45 @@
+=== 구현 세션 → 설계 세션 요청 ===
+
+## 로고 애니메이션을 인게임으로 돌리려면 조각이 필요하다
+
+`extracted/ui/` 에 들어온 것은 **완성 스틸 한 장**(`logo_screen.png`)뿐이라,
+지금 부팅 화면은 그 한 장을 페이드 인/홀드/아웃 한다 (2.3초, 아무 키나 누르면 건너뜀).
+
+`build_logo.py` 의 `sequence()` 가 의도한 것 — 큰 발자국이 하나씩 찍히다
+작은 발자국이 붙고 이름이 떠오르는 2.5초 — 은 아직 못 한다.
+합성본에서는 발자국을 따로 움직일 수 없기 때문이다.
+
+32프레임을 전부 내보내면 640×360 × 32장이라 너무 무겁다.
+**조각과 좌표만 주면 엔진에서 그린다.** 필요한 것은 셋이다:
+
+  extracted/ui/logo_paw_big.png     발자국 한 짝 (큰 것)
+  extracted/ui/logo_paw_small.png   발자국 한 짝 (작은 것)
+  extracted/ui/logo.json            아래 형식
+
+```json
+{
+  "canvas": [640, 360],
+  "wordmark_at": [229, 130],
+  "big":   [[50, 262], [122, 250], [200, 254], ...],   ← _big_at(i) 의 결과
+  "small": [[196, 306], [258, 300], ...],              ← _small_at(i) 의 결과
+  "timing": { "big_from": 3, "big_every": 2,
+              "small_from": 11, "small_every": 2,
+              "mark_from": 17, "mark_over": 7, "fps": 13 }
+}
+```
+
+`sequence()` 안에 이미 다 있는 값이라 `save_all()` 에서 덤프만 하면 된다.
+좌표가 데이터로 나오면 로고를 다시 그려도 엔진 코드를 안 고쳐도 된다 —
+지형·프롭·단서와 같은 방식이다.
+
+## 확인한 것
+
+- `logo_screen.png` 640×360 — 뷰포트와 정확히 같아서 정수배 확대로 깨지지 않는다
+- `OWNED` 에 `ui` 가 들어가서 다음 export 에서 안 날아간다
+- `logo.gif` · `logo_2x.png` · `logo_sheet.png` 는 검수용으로 보고 게임에서 안 읽는다
+
+## 게임 쪽에 붙인 것 (구현 세션 소유)
+
+- `scenes/ui/Boot.tscn` · `scripts/ui/Boot.gd`
+- `project.godot` 의 `run/main_scene` → `Boot.tscn`
+- 회귀 테스트 4개 (로고 존재 · 부팅 진입 · 건너뛰기 · 3초 이하)

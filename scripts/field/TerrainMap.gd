@@ -39,6 +39,12 @@ func _blob(terrain: String, rng: RandomNumberGenerator) -> void:
 				_tiles[tile.y * size.x + tile.x] = terrain
 
 
+## 화면 전체를 한 지형으로 채운다. 타이틀 배경이 쓴다 —
+## 거기서는 "이 종이 어디 사는가" 한 가지만 말해야 해서 지형이 섞이면 안 된다.
+func fill(terrain: String) -> void:
+	_tiles.fill(terrain)
+
+
 func at_tile(tile: Vector2i) -> String:
 	if not _inside(tile):
 		return BASE

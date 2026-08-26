@@ -36,6 +36,12 @@ static func load_data() -> void:
 		_source = _data.get("background", {}).get("day", [])
 
 
+## dawn → day → dusk → night 순서. 타이틀이 0~1 위치로 시간대를 고를 때 쓴다.
+static func cycle() -> Array:
+	load_data()
+	return _data.get("cycle", ["dawn", "day", "dusk", "night"])
+
+
 static func has_data() -> bool:
 	load_data()
 	return not _source.is_empty()

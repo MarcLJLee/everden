@@ -504,3 +504,22 @@ def save_all():
 
 if __name__ == "__main__":
     save_all()
+
+
+# 지형별로 어울리는 프롭. `palettes.json` 으로 나가고 타이틀 배경도 이걸 읽는다 —
+# 출처가 둘이 되면 어긋난다.
+PROP_TERRAIN = {
+    "초원": ["tuft", "flowers", "rock", "pebbles", "bigrock", "bush"],
+    "숲":   ["tree", "conifer", "deadtree", "stump", "mushroom", "log", "bush",
+             "thornbush", "branch"],
+    "물가": ["reed", "pebbles", "mud", "tuft"],
+    "바위": ["bigrock", "rock", "pebbles", "deadtree"],
+}
+
+# 지형 이름 → 그 지형을 채우는 타일 키들
+TERRAIN_TILES = {
+    "초원": [f"grass_{i}"  for i in range(GRASS_N)],
+    "숲":   [f"forest_{i}" for i in range(FOREST_N)],
+    "물가": [f"wet_{i}"    for i in range(WET_N)],
+    "바위": ["rock"],
+}

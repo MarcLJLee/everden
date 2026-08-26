@@ -10,6 +10,8 @@ extends Control
 
 const DATA_PATH := "res://sprites/extracted/ui/title.json"
 const ART_ROOT := "res://sprites/extracted/"
+## 타이틀에서 고르면 **필드가 아니라 집으로 들어온다.** (BRIEF §2.7)
+const HOME_SCENE := "res://scenes/home/Home.tscn"
 const FIELD_SCENE := "res://scenes/field/Field.tscn"
 const TUNING_PATH := "res://tuning/field_tuning.tres"
 const ACTOR_SCENE := "res://scenes/actors/Actor.tscn"
@@ -17,7 +19,8 @@ const HANGUL_FONT := "res://fonts/Galmuri11.ttf"
 
 ## 데모 빌드인가. 켜면 첫 항목이 DEMO 가 되고 바로 필드로 들어간다.
 ## title.json 에 items_demo 가 생기면 그쪽을 쓴다.
-@export var demo_build := true
+## 데모 빌드인가. 켜면 첫 항목이 DEMO 가 되고 곧장 필드로 들어간다.
+@export var demo_build := false
 
 ## 켜는 순간마다 배경이 달라야 하므로 시드를 고정하지 않는다.
 @onready var _world: Node2D = $World
@@ -39,6 +42,10 @@ var tuning: FieldTuning = null
 var terrain := TerrainMap.new()
 var companion: Actor = null
 var companion_name := ""
+## 지형을 먼저 고른다. 종은 거기 사는 것 중에서 고른다.
+var chosen_terrain := ""
+## 후보가 들고 있는 동작 이름 (고양이는 special)
+var chosen_animation := "idle"
 
 var _rng := RandomNumberGenerator.new()
 var _items: Array = []
@@ -87,9 +94,11 @@ func _pick_background(species_by_id: Dictionary) -> void:
 		return
 	companion_name = String(config.get("name", ""))
 
-	# 지형은 그 종의 habitat 에서만 뽑는다. 종 이름으로 고르지 않는다.
-	var habitats: Array = config.get("habitat", ["초원"])
-	var terrain_name := String(habitats[_rng.randi_range(0, habitats.size() - 1)])
+	# 지형은 _pick_companion 이 먼저 정했다. 못 정했으면 그 종의 habitat 에서 뽑는다.
+	var terrain_name := chosen_terrain
+	if terrain_name.is_empty():
+		var habitats: Array = config.get("habitat", ["초원"])
+		terrain_name = String(habitats[_rng.randi_range(0, habitats.size() - 1)])
 
 	var screen: Vector2i = Vector2i(data.get("canvas", [640, 360])[0], data.get("canvas", [640, 360])[1])
 	var tiles := Vector2i(ceili(screen.x / float(tuning.tile_size)), ceili(screen.y / float(tuning.tile_size)))
@@ -116,19 +125,38 @@ func _pick_background(species_by_id: Dictionary) -> void:
 	_spawn_companion(config, view)
 
 
-## 배경 지형은 **모든 종 × 모든 growth 단계** 에서 뽑는다. 종을 코드에 적지 않는다 —
-## 종이 하나 늘면 타이틀 풀도 저절로 늘어난다.
+## 동무 후보는 **title.json 의 candidates 를 그대로 읽는다.**
+## 스프라이트가 있는지(available)는 아트 쪽이 아는 것이라, 엔진이 따로 판단하면
+## 출처가 둘이 되어 언젠가 어긋난다.
+##
+## ★ 순서: **지형을 먼저 고르고 그 지형에 사는 종을 고른다.**
+##   수달을 초원에 세우면 틀린 것을 가르친다.
 func _pick_companion(species_by_id: Dictionary) -> Dictionary:
-	var pool: Array = []
-	for id in species_by_id:
-		var species: Dictionary = species_by_id[id]
-		for stage in species.get("growth", []):
-			if SpriteLibrary.has_art(id) and String(stage.get("stage", "")) == "adult":
-				pool.append(species)
-	if pool.is_empty():
-		var fallback := String(data.get("companion", {}).get("fallback", {}).get("species", "dog"))
-		return species_by_id.get(fallback, {})
-	return pool[_rng.randi_range(0, pool.size() - 1)]
+	var companion_data: Dictionary = data.get("companion", {})
+	var available: Array = []
+	for entry in companion_data.get("candidates", []):
+		if bool(entry.get("available", false)) and species_by_id.has(String(entry.get("species", ""))):
+			available.append(entry)
+	if available.is_empty():
+		var fallback: Dictionary = companion_data.get("fallback", {})
+		return species_by_id.get(String(fallback.get("species", "dog")), {})
+
+	# 지형 먼저 — 후보들이 사는 지형을 모으고 그중 하나를 고른 뒤, 거기 사는 종만 남긴다
+	var terrains := {}
+	for entry in available:
+		for habitat in species_by_id[String(entry["species"])].get("habitat", []):
+			terrains[String(habitat)] = true
+	var terrain_names: Array = terrains.keys()
+	chosen_terrain = String(terrain_names[_rng.randi_range(0, terrain_names.size() - 1)])
+
+	var living: Array = []
+	for entry in available:
+		if chosen_terrain in species_by_id[String(entry["species"])].get("habitat", []):
+			living.append(entry)
+	var picked: Dictionary = living[_rng.randi_range(0, living.size() - 1)]
+	# 고양이만 앉아서 앞발 든 프레임(special)이고 나머지는 idle 이다 — 후보가 들고 있다
+	chosen_animation = String(picked.get("animation", "idle"))
+	return species_by_id[String(picked["species"])]
 
 
 ## 시간대는 그 종의 activity 가 정한다 — 주행성 낮 · 야행성 밤 · 박명성 저녁.
@@ -151,6 +179,8 @@ func _spawn_companion(config: Dictionary, view: FieldTuning) -> void:
 	companion.setup(config, schema, view, _rng)
 	companion.speed_tiles = 0.0
 	companion.scale = Vector2.ONE * scale
+	if chosen_animation == "special":
+		companion.play_special = true
 	# 앵커는 왼쪽 아래 — 종마다 키가 달라서 발을 기준으로 붙인다
 	companion.position = Vector2(float(anchor[0]) + companion.canvas.x * scale * 0.5, float(anchor[1]))
 
@@ -308,8 +338,10 @@ func _activate(item: String) -> void:
 			if _has_save():
 				_ask("new_game", item)
 			else:
-				get_tree().change_scene_to_file(FIELD_SCENE)
-		"CONTINUE", "DEMO":
+				get_tree().change_scene_to_file(HOME_SCENE)
+		"CONTINUE":
+			get_tree().change_scene_to_file(HOME_SCENE)
+		"DEMO":
 			get_tree().change_scene_to_file(FIELD_SCENE)
 		"SETTING":
 			_state = State.SETTING
@@ -354,7 +386,7 @@ func _process_confirm() -> void:
 		if _confirm_action == "EXIT":
 			get_tree().quit()
 		else:
-			get_tree().change_scene_to_file(FIELD_SCENE)
+			get_tree().change_scene_to_file(HOME_SCENE)
 
 
 ## 문구는 한글이다 — 첫 플레이어가 EXIT 도 NEW GAME 도 못 읽는다.

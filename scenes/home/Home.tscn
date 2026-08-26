@@ -1,0 +1,45 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/home/Home.gd" id="1_home"]
+[ext_resource type="Script" path="res://scripts/field/Ground.gd" id="2_ground"]
+
+[node name="Home" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1_home")
+
+[node name="World" type="Node2D" parent="."]
+
+[node name="Ground" type="Node2D" parent="World"]
+script = ExtResource("2_ground")
+
+[node name="Yard" type="Node2D" parent="World"]
+
+[node name="Actors" type="Node2D" parent="World"]
+y_sort_enabled = true
+
+[node name="Hud" type="Control" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Coins" type="Label" parent="Hud"]
+offset_left = 12.0
+offset_top = 10.0
+offset_right = 130.0
+offset_bottom = 26.0
+mouse_filter = 2
+
+[node name="Seats" type="Label" parent="Hud"]
+offset_left = 12.0
+offset_top = 28.0
+offset_right = 130.0
+offset_bottom = 44.0
+mouse_filter = 2

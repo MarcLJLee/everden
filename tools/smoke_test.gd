@@ -38,6 +38,7 @@ func _run() -> void:
 	await _test_reveal(field)
 	await _test_animation_set(field)
 	await _test_art_wiring(field)
+	await _test_home()
 	await _test_boot()
 	await _test_sense_reach(field)
 	await _test_eyeshine(field)
@@ -289,6 +290,61 @@ func _test_reveal(field) -> void:
 	await process_frame
 
 
+## 집 — 사파리 층. 설계 규칙이 코드에서 유지되는지만 본다. (BRIEF §2.7)
+func _test_home() -> void:
+	var home: Control = load("res://scenes/home/Home.tscn").instantiate()
+	root.add_child(home)
+	await process_frame
+	await process_frame
+
+	_check("마당에 사물이 놓인다", home.objects.size() > 0, str(home.objects.size()))
+
+	# ★ 사물은 새 열거형을 만들지 않는다. for_tags 의 값이 전부 tags.json 에 이미 있다.
+	var known := {}
+	for field_name in ["temperament", "diet", "behavior_tags", "habitat", "social", "noise"]:
+		for value in home.schema.allowed(field_name):
+			known[String(value)] = true
+	var invented := PackedStringArray()
+	for entry in home.objects:
+		for tag in entry["for_tags"]:
+			if not known.has(String(tag)):
+				invented.append("%s:%s" % [entry["name"], tag])
+	_check("사물이 새 태그를 만들지 않는다", invented.is_empty(), ", ".join(invented))
+
+	# for_tags 가 비면 누구나, 아니면 하나라도 겹치는 동물이 쓴다
+	var open_to_all := 0
+	var matched := 0
+	for entry in home.objects:
+		if entry["for_tags"].is_empty():
+			open_to_all += 1
+		for resident in home.residents:
+			if resident.uses(entry["for_tags"]):
+				matched += 1
+	_check("태그 없는 사물은 누구나 쓴다", open_to_all > 0)
+	_check("태그가 맞는 동물이 사물을 쓴다", matched > 0, str(matched))
+
+	# ★ HUD 는 재화와 자리 둘뿐이다. 배고픔·청결·기분 게이지가 생기면 집이 할 일 목록이 된다.
+	var labels := 0
+	for child in home.get_node("Hud").get_children():
+		if child is Label:
+			labels += 1
+	_check("HUD 는 두 줄뿐이다 (재화·자리)", labels == 2, str(labels))
+
+	# ★ 사물이 새 동작을 요구하지 않는다 — 재생하는 것은 그 동물의 기존 특징 동작뿐
+	var resident: Resident = home.residents[0]
+	resident.target = home.objects[0]
+	resident._playing = true
+	resident._timer = 1.0
+	resident.update(0.016, home.objects, home.yard.yard, RandomNumberGenerator.new())
+	_check("사물 옆에서 그 동물의 기존 동작이 재생된다", resident.actor.play_special)
+	_check("사물이 자기 동작을 들고 있지 않다", not home.objects[0].has("animation"))
+
+	_check("대문이 마당 아래 한가운데에 있다",
+		absf(home.yard.gate.x - 320.0) < 24.0 and home.yard.gate.y > home.yard.yard.end.y)
+	home.queue_free()
+	await process_frame
+
+
 ## 부팅 화면 — 제작사 로고. 씬을 바꾸는 코드라 트리에 넣지 않고 계약만 확인한다.
 func _species_habitats(title) -> Array:
 	for id in DataLoader.load_all(false).species:
@@ -325,9 +381,15 @@ func _test_boot() -> void:
 	await process_frame
 	_check("타이틀 메뉴에 CONTINUE 가 없다 (세이브가 없으므로)",
 		not ("CONTINUE" in title._items), str(title._items))
-	# 데모 빌드는 새 게임이 아니라 필드 한 조각을 보여준다 — 없는 것을 약속하지 않는다
-	_check("데모 빌드의 첫 항목은 DEMO 다",
-		title.demo_build and title._items[0] == "DEMO", str(title._items))
+	# 데모 빌드는 새 게임이 아니라 필드 한 조각을 보여준다 — 없는 것을 약속하지 않는다.
+	# 데모가 아니면 NEW GAME 이고, 들어가는 곳은 필드가 아니라 집이다 (BRIEF §2.7).
+	_check("데모 여부에 따라 첫 항목이 갈린다",
+		title._items[0] == ("DEMO" if title.demo_build else "NEW GAME"),
+		"demo=%s %s" % [title.demo_build, title._items])
+	_check("타이틀에서 고르면 집으로 들어간다",
+		ResourceLoader.exists(title.HOME_SCENE))
+	_check("동무 후보는 title.json 의 candidates 에서 온다",
+		not title.data.get("companion", {}).get("candidates", []).is_empty())
 	_check("타이틀이 종의 habitat 에서 지형을 뽑는다",
 		title.terrain.at_tile(Vector2i(2, 2)) in _species_habitats(title))
 	_check("확인 창의 기본 선택은 안전한 쪽",

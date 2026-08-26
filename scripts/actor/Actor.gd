@@ -20,6 +20,9 @@ var move_vector := Vector2.ZERO
 var speed_tiles := 3.0
 ## 필드 밖으로 나가지 않게 하는 경계 (픽셀)
 var bounds := Rect2()
+## 경계가 사각형이 아닐 때 쓴다 — 울타리처럼 한 군데만 뚫려 있는 경우.
+## Vector2 를 받아 Vector2 를 돌려주면 된다. 비어 있으면 bounds 로 자른다.
+var confine := Callable()
 ## 특징 동작(개의 꼬리흔들기)을 재생할 것인가. 유도 중인 동료가 켠다 —
 ## "동료가 그 방향을 보고 킁킁댄다"가 장식이 아니라 기능이 되는 지점이다. (BRIEF §3.3)
 var play_special := false
@@ -105,7 +108,9 @@ func _process(delta: float) -> void:
 	if _moving:
 		var step := move_vector.normalized() * speed_tiles * _tuning.tile_size * delta
 		position += step
-		if bounds.size != Vector2.ZERO:
+		if confine.is_valid():
+			position = confine.call(position)
+		elif bounds.size != Vector2.ZERO:
 			position = position.clamp(bounds.position, bounds.end)
 		_apply_facing(_facing_from(move_vector))
 		_walk_phase += delta * _tuning.walk_cycle_hz

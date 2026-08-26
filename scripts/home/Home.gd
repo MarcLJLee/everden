@@ -120,7 +120,7 @@ func _spawn_residents(species_by_id: Dictionary, view: FieldTuning) -> void:
 		_actors.add_child(actor)
 		actor.setup(species, schema, view, _rng)
 		actor.speed_tiles = view.wild_speed
-		actor.bounds = yard.yard
+		actor.confine = yard.confine_resident
 		actor.position = Vector2(
 			_rng.randf_range(yard.yard.position.x + 24, yard.yard.end.x - 24),
 			_rng.randf_range(yard.yard.position.y + 12, yard.yard.end.y - 12))
@@ -141,7 +141,9 @@ func _spawn_player(view: FieldTuning) -> void:
 	_actors.add_child(player)
 	player.setup(config, schema, view, _rng)
 	player.speed_tiles = view.move_speed
-	player.bounds = Rect2(yard.yard.position, yard.yard.size + Vector2(0, 26))
+	# 울타리를 못 지나간다. 대문 구간에서만 아래로 나갈 수 있다.
+	player.confine = func(at: Vector2) -> Vector2:
+		return yard.confine_walker(at, yard.gate.y + 12.0)
 	player.position = yard.door + Vector2(0, 12)
 
 

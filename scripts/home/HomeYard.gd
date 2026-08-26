@@ -15,6 +15,8 @@ var data := {}
 var yard := Rect2()
 ## 대문 한가운데. 여기로 나간다.
 var gate := Vector2.ZERO
+## 대문이 뚫려 있는 폭(픽셀). 울타리는 이 구간에서만 지나갈 수 있다.
+var gate_width := 32.0
 var door := Vector2.ZERO
 
 
@@ -86,6 +88,7 @@ func _fence(parent: Node2D, screen: Vector2i, house_at: Vector2, house_size: Vec
 			_put(parent, fence_h, Vector2(x, bottom))
 		x += post
 	_put(parent, fence_gate, Vector2(gate.x - gate_half, bottom - 2))
+	gate_width = gate_half * 2.0
 	# 옆
 	var y := int(house_at.y + house_size.y)
 	while y < bottom:
@@ -115,3 +118,19 @@ func _texture(relative: String) -> Texture2D:
 
 static func _size(value: Array) -> Vector2:
 	return Vector2(float(value[0]), float(value[1]))
+
+
+## 울타리는 막는다. 대문 구간에서만 아래로 나갈 수 있다 —
+## 사각형으로 자르면 아래쪽 울타리를 아무 데서나 통과한다.
+func confine_walker(at: Vector2, exit_y: float) -> Vector2:
+	var inside := at.clamp(yard.position, yard.end)
+	if absf(at.x - gate.x) <= gate_width * 0.5 - 4.0:
+		# 대문 앞이면 아래로 더 갈 수 있다. 좌우는 대문 폭 안으로 모은다.
+		inside.x = clampf(at.x, gate.x - gate_width * 0.5 + 4.0, gate.x + gate_width * 0.5 - 4.0)
+		inside.y = clampf(at.y, yard.position.y, exit_y)
+	return inside
+
+
+## 동물은 마당을 못 나간다. 대문은 플레이어만 쓴다.
+func confine_resident(at: Vector2) -> Vector2:
+	return at.clamp(yard.position, yard.end)

@@ -339,6 +339,17 @@ func _test_home() -> void:
 	_check("사물 옆에서 그 동물의 기존 동작이 재생된다", resident.actor.play_special)
 	_check("사물이 자기 동작을 들고 있지 않다", not home.objects[0].has("animation"))
 
+	# ★ 울타리는 막는다. 사각형으로 자르면 아래쪽 울타리를 아무 데서나 통과한다.
+	var below := Vector2(home.yard.yard.position.x + 40, home.yard.gate.y + 8)
+	var pushed: Vector2 = home.yard.confine_walker(below, home.yard.gate.y + 12.0)
+	_check("대문이 아닌 곳에서는 울타리를 못 지나간다",
+		pushed.y <= home.yard.yard.end.y + 0.01, "%s → %s" % [below, pushed])
+	var at_gate := Vector2(home.yard.gate.x, home.yard.gate.y + 8)
+	var through: Vector2 = home.yard.confine_walker(at_gate, home.yard.gate.y + 12.0)
+	_check("대문 앞에서는 나갈 수 있다", through.y > home.yard.yard.end.y, str(through))
+	var wanderer: Vector2 = home.yard.confine_resident(below)
+	_check("동물은 대문으로도 못 나간다", wanderer.y <= home.yard.yard.end.y + 0.01, str(wanderer))
+
 	_check("대문이 마당 아래 한가운데에 있다",
 		absf(home.yard.gate.x - 320.0) < 24.0 and home.yard.gate.y > home.yard.yard.end.y)
 	home.queue_free()

@@ -41,6 +41,7 @@ func _run() -> void:
 	await _test_home()
 	await _test_boot()
 	await _test_sense_reach(field)
+	await _test_terrain_walk(field)
 	await _test_eyeshine(field)
 	await _test_puff(field)
 	await _test_invite(field)
@@ -341,13 +342,13 @@ func _test_home() -> void:
 
 	# ★ 울타리는 막는다. 사각형으로 자르면 아래쪽 울타리를 아무 데서나 통과한다.
 	var below := Vector2(home.yard.yard.position.x + 40, home.yard.gate.y + 8)
-	var pushed: Vector2 = home.yard.confine_walker(below, home.yard.gate.y + 12.0)
+	var pushed: Vector2 = home.yard.confine_walker(below, below, home.yard.gate.y + 12.0)
 	_check("대문이 아닌 곳에서는 울타리를 못 지나간다",
 		pushed.y <= home.yard.yard.end.y + 0.01, "%s → %s" % [below, pushed])
 	var at_gate := Vector2(home.yard.gate.x, home.yard.gate.y + 8)
-	var through: Vector2 = home.yard.confine_walker(at_gate, home.yard.gate.y + 12.0)
+	var through: Vector2 = home.yard.confine_walker(at_gate, at_gate, home.yard.gate.y + 12.0)
 	_check("대문 앞에서는 나갈 수 있다", through.y > home.yard.yard.end.y, str(through))
-	var wanderer: Vector2 = home.yard.confine_resident(below)
+	var wanderer: Vector2 = home.yard.confine_resident(below, below)
 	_check("동물은 대문으로도 못 나간다", wanderer.y <= home.yard.yard.end.y + 0.01, str(wanderer))
 
 	_check("대문이 마당 아래 한가운데에 있다",
@@ -549,6 +550,67 @@ func _test_sense_reach(field) -> void:
 			widest = maxf(widest, field.guide.max_reach(companion, String(sense)))
 	_check("풀 AI 승격 거리가 가장 먼 감각을 덮는다", field._promotion_px >= widest,
 		"승격 %.0fpx / 감각 %.0fpx" % [field._promotion_px, widest])
+	await process_frame
+
+
+## ★ 갈 수 있는 지형 — 물가·바위는 그 지형이 habitat 인 동물만 (사용자 판단)
+func _test_terrain_walk(field) -> void:
+	var schema: TagSchema = field.schema
+	var map: TerrainMap = field.terrain
+	_check("초원·숲은 누구나 지나간다", schema.walkable("초원") and schema.walkable("숲"))
+	_check("물가·바위는 기본으로 막힌다", not schema.walkable("물가") and not schema.walkable("바위"))
+
+	var water := _find_terrain_point(field, "물가")
+	var meadow := _find_terrain_point(field, "초원")
+	if water == Vector2.INF or meadow == Vector2.INF:
+		_check("지형 통행 테스트 준비 — 물가와 초원이 있다", false)
+		return
+
+	_check("수달은 물가에 들어간다", map.can_stand(water, schema, ["물가"]))
+	_check("개는 물가에 못 들어간다", not map.can_stand(water, schema, ["초원", "숲"]))
+	_check("고양이는 바위에 들어간다",
+		map.can_stand(_find_terrain_point(field, "바위"), schema, ["초원", "숲", "바위"])
+		or _find_terrain_point(field, "바위") == Vector2.INF)
+	_check("청설모(숲)도 초원은 지나간다", map.can_stand(meadow, schema, ["숲"]))
+	_check("플레이어는 habitat 이 없어 물가에 못 들어간다",
+		not map.can_stand(water, schema, []))
+
+	# 막히면 미끄러진다 — 그냥 되돌리면 비스듬히 붙었을 때 갇힌 것처럼 느껴진다.
+	# 무작위 지형에 기대면 검사가 조용히 건너뛰어진다. 판을 직접 깔고 잰다.
+	var bench := TerrainMap.new()
+	bench.generate(Vector2i(8, 8), 16, {}, RandomNumberGenerator.new())
+	bench.fill("초원")
+	for y in 8:
+		bench.set_tile(Vector2i(4, y), "물가")
+	var from_left := Vector2(3.5 * 16, 3.5 * 16)
+	var into_water := Vector2(4.5 * 16, 4.5 * 16)     # 오른쪽 아래로 비스듬히
+	var slid: Vector2 = bench.slide(from_left, into_water, schema, [])
+	_check("막힌 지형에 비스듬히 닿으면 미끄러진다",
+		slid != from_left and slid != into_water, "%s → %s" % [from_left, slid])
+	_check("미끄러져도 막힌 지형에는 안 들어간다", bench.can_stand(slid, schema, []))
+	_check("물가가 habitat 이면 그대로 들어간다",
+		bench.slide(from_left, into_water, schema, ["물가"]) == into_water)
+
+	# ★ 막힌 지형은 얇아야 한다. 두꺼우면 한가운데 선 동물에게 교감 반경 안으로
+	#   다가갈 수 없어 초대가 아예 불가능해진다 (두껍게 찍었을 때 물가의 60%가 그랬다).
+	var tile: int = field.tuning.tile_size
+	var deepest := 0.0
+	for y in map.size.y:
+		for x in map.size.x:
+			if schema.walkable(map.at_tile(Vector2i(x, y))):
+				continue
+			var here := (Vector2(x, y) + Vector2(0.5, 0.9)) * tile
+			var nearest := INF
+			for radius in range(1, 8):
+				for step in 12:
+					var probe := here + Vector2.RIGHT.rotated(TAU * step / 12.0) * radius * tile
+					if map.can_stand(probe, schema, []):
+						nearest = minf(nearest, here.distance_to(probe))
+				if nearest < INF:
+					break
+			deepest = maxf(deepest, nearest)
+	_check("막힌 지형 한가운데도 설 수 있는 자리에서 3타일 안이다",
+		deepest <= 3.0 * tile, "%.1f타일" % (deepest / tile))
 	await process_frame
 
 

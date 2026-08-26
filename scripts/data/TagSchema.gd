@@ -9,7 +9,8 @@ var required_tags: Dictionary = {}      ## field -> Array[String]
 var optional_tags: Dictionary = {}      ## field -> Array[String]
 var trait_to_sense: Dictionary = {}     ## trait -> {sense, clue}
 var sense_profile: Dictionary = {}
-var eyeshine: Dictionary = {}           ## activity -> 눈이 빛나 보이는 시간대 목록      ## sense -> {reveals, range_scale, daypart_scale, terrain_scale}
+var eyeshine: Dictionary = {}
+var terrain_walkable: Dictionary = {}   ## 지형 -> 플레이어가 밟을 수 있는가           ## activity -> 눈이 빛나 보이는 시간대 목록      ## sense -> {reveals, range_scale, daypart_scale, terrain_scale}
 var emote_icons: Dictionary = {}
 var expression_set: Dictionary = {}
 var derivations: Dictionary = {}
@@ -24,6 +25,7 @@ static func from_dict(raw: Dictionary) -> TagSchema:
 	s.trait_to_sense = _strip_comments(raw.get("trait_to_sense", {}))
 	s.sense_profile = _strip_comments(raw.get("sense_profile", {}))
 	s.eyeshine = _strip_comments(raw.get("eyeshine", {})).get("by_activity", {})
+	s.terrain_walkable = _strip_comments(raw.get("terrain_walkable", {}))
 	s.emote_icons = _strip_comments(raw.get("emote_icons", {}))
 	s.expression_set = _strip_comments(raw.get("expression_set", {}))
 	s.derivations = _strip_comments(raw.get("derivations", {}))
@@ -83,6 +85,11 @@ func sense_icon(sense: String) -> String:
 ## 이 활동 시간대의 동물이 눈을 빛내는 시간대들. 종은 묻지 않는다.
 func eyeshines_at(activity: String, daypart: String) -> bool:
 	return daypart in eyeshine.get(activity, [])
+
+## 플레이어가 밟을 수 있는 지형인가. 동물에게는 걸리지 않는다 —
+## 물가·바위는 서식지라 막으면 그 종이 자기 집에 못 산다.
+func walkable(terrain: String) -> bool:
+	return bool(terrain_walkable.get(terrain, true))
 
 func known_senses() -> Array:
 	return sense_profile.keys()

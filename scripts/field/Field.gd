@@ -63,6 +63,9 @@ func _ready() -> void:
 
 	var tile := tuning.tile_size
 	_bounds = Rect2(Vector2.ZERO, Vector2(tuning.map_size) * tile)
+	for name in schema.terrain_walkable:
+		if not schema.walkable(String(name)):
+			terrain.blocked_terrains.append(String(name))
 	terrain.generate(tuning.map_size, tile, {
 		"숲": tuning.forest_patches,
 		"물가": tuning.water_patches,
@@ -81,6 +84,8 @@ func _ready() -> void:
 
 	_spawn_player()
 	_spawn_companions(result.species)
+	for companion in companions:
+		companion.confine = _terrain_confine(companion)
 	_promotion_px = _promotion_radius_px()
 	sim.setup(_actors, actor_scene, schema, tuning, _rng, _bounds, terrain, _promotion_px)
 
@@ -137,6 +142,9 @@ func _spawn_player() -> void:
 	player = _make_actor(config)
 	player.position = _bounds.size * 0.5
 	player.speed_tiles = tuning.move_speed
+	# 물가·바위는 못 밟는다. **동물에게는 걸리지 않는다** — 서식지이기 때문이다.
+	# 교감은 근처에서 되므로 물가에 선 수달을 물가 밖에서 부를 수 있다.
+	player.confine = _terrain_confine(player)
 
 
 func _spawn_companions(species_by_id: Dictionary) -> void:
@@ -162,6 +170,12 @@ func _collect_targets(species_by_id: Dictionary) -> Array:
 			continue
 		targets.append(species_by_id[id])
 	return targets
+
+
+## 막힌 지형을 그 액터의 habitat 으로 판정한다. 개는 물을 못 건너고 수달은 건넌다.
+func _terrain_confine(actor: Actor) -> Callable:
+	return func(from: Vector2, at: Vector2) -> Vector2:
+		return terrain.slide(from, at.clamp(_bounds.position, _bounds.end), schema, actor.habitat)
 
 
 func _make_actor(config: Dictionary) -> Actor:

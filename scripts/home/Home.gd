@@ -142,8 +142,8 @@ func _spawn_player(view: FieldTuning) -> void:
 	player.setup(config, schema, view, _rng)
 	player.speed_tiles = view.move_speed
 	# 울타리를 못 지나간다. 대문 구간에서만 아래로 나갈 수 있다.
-	player.confine = func(at: Vector2) -> Vector2:
-		return yard.confine_walker(at, yard.gate.y + 12.0)
+	player.confine = func(from: Vector2, at: Vector2) -> Vector2:
+		return yard.confine_walker(from, at, yard.gate.y + 12.0)
 	player.position = yard.door + Vector2(0, 12)
 
 

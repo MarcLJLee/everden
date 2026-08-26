@@ -95,7 +95,13 @@ func _wander(animal: WildAnimal, delta: float) -> void:
 	if animal.turn_timer <= 0.0:
 		animal.velocity = _random_velocity()
 		animal.turn_timer = _rng.randf_range(1.5, 4.5)
-	animal.position += animal.velocity * delta
+	var stepped := animal.position + animal.velocity * delta
+	# 수영 안 하는 동물이 호수를 가로지르지 않는다. 갈 수 있는 곳은 habitat 이 정한다.
+	var settled := _terrain.slide(animal.position, stepped, _schema,
+		animal.species.get("habitat", [])) if _terrain != null else stepped
+	if settled != stepped:
+		animal.velocity = -animal.velocity   # 막히면 돌아선다. 벽에 붙어 떠는 것보다 낫다
+	animal.position = settled
 	# 경계에서 튕긴다
 	if animal.position.x < _bounds.position.x or animal.position.x > _bounds.end.x:
 		animal.velocity.x *= -1.0

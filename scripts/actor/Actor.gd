@@ -21,7 +21,9 @@ var speed_tiles := 3.0
 ## 필드 밖으로 나가지 않게 하는 경계 (픽셀)
 var bounds := Rect2()
 ## 경계가 사각형이 아닐 때 쓴다 — 울타리처럼 한 군데만 뚫려 있는 경우.
-## Vector2 를 받아 Vector2 를 돌려주면 된다. 비어 있으면 bounds 로 자른다.
+## `func(from: Vector2, to: Vector2) -> Vector2`. 비어 있으면 bounds 로 자른다.
+## 이전 위치를 같이 넘기는 것은 **막힌 곳에서 미끄러지게** 하기 위해서다 —
+## 그냥 되돌리면 벽에 비스듬히 붙었을 때 아예 안 움직인다.
 var confine := Callable()
 ## 특징 동작(개의 꼬리흔들기)을 재생할 것인가. 유도 중인 동료가 켠다 —
 ## "동료가 그 방향을 보고 킁킁댄다"가 장식이 아니라 기능이 되는 지점이다. (BRIEF §3.3)
@@ -35,6 +37,8 @@ var display_name := ""
 var diet := ""
 var activity := ""
 var senses: Array = []
+## 이 동물이 들어갈 수 있는 막힌 지형. 기본 지형은 habitat 과 무관하게 지나간다.
+var habitat: Array = []
 var traits: Array = []
 ## 개체값 — 능력치가 무언가를 결정해야 한다 (BRIEF §2.5)
 var sense_scale := 1.0
@@ -68,6 +72,7 @@ func setup(config: Dictionary, schema: TagSchema, tuning: FieldTuning, rng: Rand
 	diet = String(config.get("diet", ""))
 	activity = String(config.get("activity", ""))
 	senses = config.get("senses", [])
+	habitat = config.get("habitat", [])
 	traits = config.get("traits", [])
 	canvas = SpriteLibrary.canvas_for(species_id,
 		schema.canvas_for(String(config.get("size_class", "중"))))
@@ -107,9 +112,10 @@ func _process(delta: float) -> void:
 	_moving = move_vector.length() > 0.05
 	if _moving:
 		var step := move_vector.normalized() * speed_tiles * _tuning.tile_size * delta
+		var came_from := position
 		position += step
 		if confine.is_valid():
-			position = confine.call(position)
+			position = confine.call(came_from, position)
 		elif bounds.size != Vector2.ZERO:
 			position = position.clamp(bounds.position, bounds.end)
 		_apply_facing(_facing_from(move_vector))

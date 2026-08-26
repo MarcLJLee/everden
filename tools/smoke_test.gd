@@ -38,6 +38,7 @@ func _run() -> void:
 	await _test_reveal(field)
 	await _test_animation_set(field)
 	await _test_art_wiring(field)
+	_test_boot()
 	await _test_sense_reach(field)
 	await _test_eyeshine(field)
 	await _test_puff(field)
@@ -286,6 +287,21 @@ func _test_reveal(field) -> void:
 	clues = field._apply_reveal()
 	_check("감각이 없어도 가까이 가면 보인다", animal.actor.visible and clues.is_empty())
 	await process_frame
+
+
+## 부팅 화면 — 제작사 로고. 씬을 바꾸는 코드라 트리에 넣지 않고 계약만 확인한다.
+func _test_boot() -> void:
+	_check("로고 그림이 있다",
+		ResourceLoader.exists("res://sprites/extracted/ui/logo_screen.png"))
+	_check("게임이 부팅 화면부터 뜬다",
+		String(ProjectSettings.get_setting("application/run/main_scene", ""))
+			== "res://scenes/ui/Boot.tscn")
+	var boot: Control = load("res://scenes/ui/Boot.tscn").instantiate()
+	# "아이는 이 화면을 수백 번 본다" — 건너뛸 수 있어야 하고, 길면 안 된다
+	_check("아무 키나 누르면 건너뛴다", boot.has_method("_unhandled_input"))
+	var total: float = boot.fade_in + boot.hold + boot.fade_out
+	_check("로고가 3초를 넘지 않는다", total <= 3.0, "%.1f초" % total)
+	boot.free()
 
 
 ## 아트 인계 — 지형 타일 · 프롭 · 단서 마커 · 밤낮 (HANDOFF §2)

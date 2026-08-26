@@ -11,6 +11,7 @@ import os, json
 from PIL import Image
 import build as A
 import build_bg as G
+import build_logo as L
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "extracted")
 
@@ -32,7 +33,7 @@ def w(path, im):
 # ★ 예전에 `shutil.rmtree(OUT)` 였다. 그러면 이 스크립트가 만들지 않는 것 —
 #   구현 세션이 내보낸 `extracted/player/` 37장 — 이 통째로 사라진다.
 #   생성기는 자기가 쓰는 자리만 지운다.
-OWNED = ("dog", "cat", "squirrel", "shared", "terrain", "props", "clues", "food")
+OWNED = ("dog", "cat", "squirrel", "shared", "terrain", "props", "clues", "food", "ui")
 
 def clear_owned():
     """소유 폴더의 png·json 만 지운다.
@@ -129,6 +130,9 @@ def main():
     for name, c in G.OBJECTS.items(): w(f"{OUT}/props/{name}.png", c.img(day))
     for name, c in G.CLUES.items():   w(f"{OUT}/clues/{name}.png", c.img(day))
     for name, c in G.FOODS.items():   w(f"{OUT}/food/{name}.png", c.img(day))
+
+    # ── UI — 제작사 로고 (부팅 화면) ─────────────────────────────────
+    L.save_all()
 
     # ── 팔레트 — 밤낮은 이 값들을 보간해서 만든다 ────────────────────
     def rgba(p): return [list(G._rgba(x)) for x in p]

@@ -7,7 +7,7 @@ config_version=5
 
 config/name="safari-demo1"
 config/description="Demo 1: 필드 슬라이스 — DEMO-SPEC.md 참조"
-run/main_scene="res://scenes/field/Field.tscn"
+run/main_scene="res://scenes/ui/Boot.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 
 [display]

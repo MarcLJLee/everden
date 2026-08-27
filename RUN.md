@@ -938,3 +938,18 @@ python present_player.py    # 플레이어 (반드시 뒤에)
 DEMO-SPEC §4 완료 조건 중 코드로 확인 가능한 것들(북향 숨김, 정수 스냅 바운스,
 감각 대비, 승격/강등, 상성 계수, 게이지 비중단, 초대 처리)을 점검한다.
 **재미있는지는 여기서 안 나온다.** 그건 직접 돌려봐야 한다.
+
+
+## 빌드
+
+```bash
+godot --headless --export-release "Windows" build/EVERDEN.exe
+godot --headless --export-release "macOS" build/EVERDEN.app
+```
+
+> ⚠️ **`sprites/*.png` 로 빼지 말 것.** Godot 의 `*` 는 `/` 를 넘어가서
+> `sprites/extracted/**` 의 게임 아트까지 통째로 날린다 — 실제로 그렇게
+> **그래픽이 하나도 없는 빌드**가 나갔다. `exclude_filter` 에 리뷰 시트를
+> **하나씩** 적는다. 설계 세션이 시트를 새로 내보내면 그때 목록에 더한다.
+> ⚠️ `.txt` · `.md` 는 `all_resources` 로 안 딸려 온다. 갈무리 SIL OFL 라이선스는
+> `include_filter` 에 따로 적어야 한다 — 안 적었더니 첫 빌드에 라이선스가 빠졌다.

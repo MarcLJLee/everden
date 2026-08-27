@@ -1404,6 +1404,10 @@ func _test_weather(field, game) -> void:
 
 	# ★ 초대 카드 — **축하지 평가가 아니다** (BRIEF §3.12). 능력치 숫자를 넣지 않는다.
 	var card: CanvasLayer = field.get_node("InviteCard")
+	# ⚠️ 덮는 판이 있는 화면은 **처음에 꺼져 있어야 한다.** 안 끄면 게임을 켜자마자
+	#    화면 전체가 어두워진다 (실제로 그렇게 나갔다 — 사용자 지적).
+	_check("초대 카드는 처음에 꺼져 있다", not card.visible)
+	_check("나가는 문도 처음에 꺼져 있다", not field.get_node("GoHome").visible)
 	var deer: Dictionary = DataLoader.load_all(true).species.get("water_deer", {})
 	card.show_for({"species_id": "water_deer", "sex": "male", "stage": "adult", "age_years": 3},
 		deer, true, field.schema)

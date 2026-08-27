@@ -23,6 +23,12 @@ const BODY_HEIGHT := 92.0
 var _open := false
 
 
+## ⚠️ **처음에는 꺼져 있어야 한다.** 씬에 어둡게 덮는 판이 있어서, 안 끄면
+##    게임을 켜자마자 화면 전체가 어두워진다 (실제로 그렇게 나갔다).
+func _ready() -> void:
+	visible = false
+
+
 ## one 은 개체({species_id, sex, stage, age_years}), species 는 종 정의다.
 func show_for(one: Dictionary, species: Dictionary, is_new: bool,
 		schema: TagSchema = null) -> void:

@@ -80,7 +80,7 @@ func _ready() -> void:
 			terrain.blocked_terrains.append(String(name))
 	# ★ 지형은 **지역이 정한다.** 모든 필드에 물가가 조금씩 섞이면
 	#   뒷산에 늘 개울이 있는 셈이 되어 "뒷산에 수달이 산다"가 되어버린다.
-	var region: Dictionary = result.regions.get(region_id, {})
+	var region: Dictionary = result.regions.get(Game.region_id, result.regions.get(region_id, {}))
 	var shape: Dictionary = region.get("terrain", {})
 	var patches: Dictionary = shape.get("patches", {
 		"숲": tuning.forest_patches, "물가": tuning.water_patches, "바위": tuning.rock_patches,
@@ -105,6 +105,8 @@ func _ready() -> void:
 	sim.setup(_actors, actor_scene, schema, tuning, _rng, _bounds, terrain, _promotion_px)
 	# 이 필드가 어느 지역인가. 지역이 늘면 여기만 갈아끼운다.
 	sim.region = region
+	# 짝 없이 혼자인 종이 있으면 그 종의 반대 성별이 반드시 정의된다 (BRIEF §2.4 확정 배치)
+	sim.pair_needed = Game.lonely_species()
 
 	_target_species = _collect_targets(result.species)
 	sim.spawn(_target_species, player.position)
@@ -189,26 +191,40 @@ func _spawn_player() -> void:
 	player.confine = _terrain_confine(player)
 
 
+## 누구를 데려왔는가는 **지도에서 고른 것**이다 (BRIEF §3.9).
+## 저장에 아무도 없으면(DEMO 로 바로 들어온 경우) 튜닝의 기본값을 쓴다.
 func _spawn_companions(species_by_id: Dictionary) -> void:
-	for index in tuning.companion_ids.size():
-		var id := tuning.companion_ids[index]
-		if not species_by_id.has(id):
-			push_warning("동료로 지정된 '%s' 가 데이터에 없습니다" % id)
-			continue
-		var companion := _make_actor(species_by_id[id])
+	var going: Array = []
+	for one in Game.party_members():
+		if species_by_id.has(String(one["species_id"])):
+			going.append(one)
+	if going.is_empty():
+		for id in tuning.companion_ids:
+			if species_by_id.has(id):
+				going.append({"species_id": id, "sex": ""})
+	for index in going.size():
+		var one: Dictionary = going[index]
+		var companion := _make_actor(species_by_id[String(one["species_id"])],
+			String(one.get("sex", "")))
 		companion.position = player.position + Vector2(-tuning.tile_size * (index + 1), 8)
 		companion.speed_tiles = tuning.move_speed * tuning.companion_speed_scale
 		companions.append(companion)
-	_active_companion_ids.assign(tuning.companions_active_at_start)
+	# 데려온 아이는 처음부터 같이 다닌다 — 지도에서 이미 골랐다.
+	_active_companion_ids.clear()
+	for companion in companions:
+		_active_companion_ids.append(companion.species_id)
 	_sync_companion_visibility()
 
 
 ## 동료로 데려가는 종을 뺀 나머지가 필드의 대상이다. 코드가 종을 고르지 않는다 —
 ## 누구를 데려갈지는 tuning 의 companion_ids 에 적혀 있다.
 func _collect_targets(species_by_id: Dictionary) -> Array:
+	var going: Array = []
+	for companion in companions:
+		going.append(companion.species_id)
 	var targets: Array = []
 	for id in species_by_id:
-		if id in tuning.companion_ids:
+		if id in going:
 			continue
 		targets.append(species_by_id[id])
 	return targets
@@ -220,10 +236,10 @@ func _terrain_confine(actor: Actor) -> Callable:
 		return terrain.slide(from, at.clamp(_bounds.position, _bounds.end), schema, actor.habitat)
 
 
-func _make_actor(config: Dictionary) -> Actor:
+func _make_actor(config: Dictionary, sex := "") -> Actor:
 	var actor: Actor = actor_scene.instantiate()
 	_actors.add_child(actor)
-	actor.setup(config, schema, tuning, _rng)
+	actor.setup(config, schema, tuning, _rng, sex)
 	actor.bounds = _bounds
 	return actor
 
@@ -374,6 +390,9 @@ func _update_interaction(delta: float) -> void:
 			gauge.cancel()  # 취소는 플레이어가 명시적으로 누를 때만
 			return
 		if gauge.update(delta, player.position.distance_to(gauge.target.position)):
+			# ★ 친구가 생긴 순간은 **바로 저장한다** (사용자 지적).
+			#   원정 중에 창을 닫아도 만난 아이가 사라지면 되돌릴 수 없는 손실이다 (원칙 2).
+			Game.add(gauge.target.species.get("id", ""), gauge.target.sex)
 			sim.invite(gauge.target)
 			metrics.note_invited()
 			gauge.close()

@@ -18,6 +18,20 @@ func _run() -> void:
 	var result := DataLoader.load_all(true)
 	_check("데이터 로드", result.ok, result.reject_reason)
 
+	# ⚠️ 회귀는 **진짜 저장 파일을 건드리면 안 된다** — 사람이 모아온 아이들이 거기 있다.
+	#    그리고 판을 여기서 짜 놓아야 한다: 저장 상태에 따라 결과가 달라지면
+	#    "어제는 통과했는데" 가 시작된다.
+	# ⚠️ 오토로드의 `_ready` 는 **첫 프레임에** 돌면서 진짜 저장을 읽어온다.
+	#    그 전에 판을 짜면 조용히 덮어써져서, 테스트가 사람의 세이브를 물고 돌게 된다.
+	#    실제로 그렇게 돌다가 동료가 하나로 줄어 세 판정이 깨졌다.
+	await process_frame
+	var game: GameState = root.get_node("Game")
+	game.autosave = false
+	game.start_new()
+	# 개와 고양이 둘 다 필요하다 — **감각 대비**가 이 회귀의 핵심이다 (BRIEF §3.8).
+	game.party = [int(game.add("dog")["uid"]), int(game.add("cat")["uid"])]
+	_check("회귀는 저장을 건드리지 않는다", not game.autosave)
+
 	var field: Node2D = load("res://scenes/field/Field.tscn").instantiate()
 	root.add_child(field)
 	await process_frame
@@ -1267,6 +1281,55 @@ func _test_weather(field) -> void:
 		"lean": 1, "hz": 1.0, "phase": 0.0, "at": 0}]
 	PropScatter.sway(far, 0.05, 1.0, wide)
 	_check("화면 밖 프롭은 건드리지 않는다", int(far[0]["at"]) == 0)
+
+	# ★ 새 판은 **아무도 없이** 시작한다. 처음부터 개와 고양이를 들려주면
+	#   "친구가 생긴다" 는 이 게임의 첫 사건이 사라진다 (사용자 지적).
+	var fresh := GameState.new()
+	fresh.autosave = false
+	fresh.start_new()
+	_check("새 판에는 아무도 없다", fresh.collection.is_empty(),
+		"%d 마리" % fresh.collection.size())
+	_check("새 판은 첫 만남을 안 지났다", not fresh.tutorial_done)
+	var puppy := fresh.finish_tutorial()
+	_check("첫 만남이 끝나면 강아지가 식구가 된다",
+		fresh.collection.size() == 1 and String(puppy["species_id"]) == "dog")
+	_check("그 아이가 그대로 첫 동료가 된다", fresh.party == [int(puppy["uid"])])
+	_check("첫 만남을 지났다고 남는다", fresh.tutorial_done)
+
+	# 개체는 종이 아니다 — 같은 종이라도 uid 로 센다
+	var another := fresh.add("dog", "female")
+	_check("같은 종을 또 데려와도 따로 센다",
+		fresh.collection.size() == 2 and int(another["uid"]) != int(puppy["uid"]))
+	_check("uid 로 찾는다", String(fresh.of_uid(int(another["uid"]))["sex"]) == "female")
+	_check("없는 uid 는 빈 값", fresh.of_uid(9999).is_empty())
+
+	# 짝 확정 배치 — 혼자인 종의 반대 성별이 필드에 반드시 정의된다 (BRIEF §2.4)
+	var only := GameState.new()
+	only.autosave = false
+	only.start_new()
+	only.add("squirrel", "male")
+	_check("혼자면 반대 성별을 찾는다",
+		String(only.lonely_species().get("squirrel", "")) == "female",
+		"%s" % [only.lonely_species()])
+	only.add("squirrel", "female")
+	_check("짝이 생기면 더 안 찾는다", not only.lonely_species().has("squirrel"))
+
+	# ⚠️ 원칙 1 — 동물은 죽지 않는다. 빼는 길이 없어야 한다.
+	var can_remove := false
+	for name in ["remove", "release", "drop", "delete", "kill"]:
+		if fresh.has_method(name):
+			can_remove = true
+	_check("식구를 빼는 길이 없다 — 동물은 죽지 않는다", not can_remove)
+
+	# 저장 → 불러오기가 그대로 돌아온다 (종 id 는 문자열이다 — 팩이 바뀌어도 안 깨진다)
+	for one in fresh.collection:
+		_check("종 id 는 문자열로 남는다", one["species_id"] is String)
+
+	# 조사는 받침을 따라간다 — "개 가 좋아할 거예요" 처럼 띄면 아이가 읽다가 걸린다
+	_check("받침 없으면 가", Josa.이가("개") == "개가")
+	_check("받침 있으면 이", Josa.이가("곰") == "곰이")
+	_check("청설모는 가", Josa.이가("청설모") == "청설모가")
+	_check("받침 있는 은", Josa.은는("고슴도치") == "고슴도치는")
 
 	# ★ 실제 날씨는 튀지 않는다 — 지금과 가까운 상태로만 옮겨간다 (사용자 지적)
 	var walker := WeatherSystem.new()

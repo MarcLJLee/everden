@@ -12,6 +12,7 @@ const DATA_PATH := "res://sprites/extracted/ui/title.json"
 const ART_ROOT := "res://sprites/extracted/"
 ## 타이틀에서 고르면 **필드가 아니라 집으로 들어온다.** (BRIEF §2.7)
 const HOME_SCENE := "res://scenes/home/Home.tscn"
+const FIRST_SCENE := "res://scenes/ui/FirstMeeting.tscn"
 const FIELD_SCENE := "res://scenes/field/Field.tscn"
 const TUNING_PATH := "res://tuning/field_tuning.tres"
 const ACTOR_SCENE := "res://scenes/actors/Actor.tscn"
@@ -352,9 +353,10 @@ func _activate(item: String) -> void:
 			if _has_save():
 				_ask("new_game", item)
 			else:
-				get_tree().change_scene_to_file(HOME_SCENE)
+				_begin_new()
 		"CONTINUE":
-			get_tree().change_scene_to_file(HOME_SCENE)
+			get_tree().change_scene_to_file(
+				HOME_SCENE if Game.tutorial_done else FIRST_SCENE)
 		"DEMO":
 			get_tree().change_scene_to_file(FIELD_SCENE)
 		"SETTING":
@@ -368,7 +370,13 @@ func _activate(item: String) -> void:
 
 
 func _has_save() -> bool:
-	return false   # 저장/불러오기는 Demo 1 범위 밖이다 (DEMO-SPEC §1)
+	return FileAccess.file_exists(GameState.SAVE_PATH)
+
+
+## 새 판은 **아무도 없이** 시작한다. 첫 강아지는 초대해서 얻는다 (§3.8).
+func _begin_new() -> void:
+	Game.start_new()
+	get_tree().change_scene_to_file(FIRST_SCENE)
 
 
 # --- 확인 창 — 되돌릴 수 없는 것에만 -----------------------------------------
@@ -400,7 +408,7 @@ func _process_confirm() -> void:
 		if _confirm_action == "EXIT":
 			get_tree().quit()
 		else:
-			get_tree().change_scene_to_file(HOME_SCENE)
+			_begin_new()
 
 
 ## 문구는 한글이다 — 첫 플레이어가 EXIT 도 NEW GAME 도 못 읽는다.

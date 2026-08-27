@@ -56,6 +56,26 @@ static func ground_clue_texture(trait_name: String) -> Texture2D:
 
 
 ## 이 지형에 어울리는 프롭 이름 목록
+## 지형 타일 한 칸. 원본은 가로 스트립이라 **첫 프레임만** 떼어 쓴다.
+## 세계 지도가 배경을 새로 그리지 않고 이걸 넓게 깔아 지역 덩어리를 만든다 (§3.9).
+static func terrain_tile(name: String) -> Texture2D:
+	var path := ROOT + "/terrain/%s.png" % name
+	if not ResourceLoader.exists(path):
+		return null
+	var sheet: Texture2D = DayPalette.texture_for(path)
+	if sheet == null:
+		return null
+	var frame := AtlasTexture.new()
+	frame.atlas = sheet
+	frame.region = Rect2(0, 0, mini(16, sheet.get_width()), sheet.get_height())
+	return frame
+
+
+## ui/ 아래의 한 장. 로고·커서·지도 아이콘이 여기 있다.
+static func ui_texture(name: String) -> Texture2D:
+	return _texture_from("ui/%s.png" % name, false)
+
+
 static func props_for_terrain(terrain: String) -> Array:
 	return index().get("prop_terrain", {}).get(terrain, [])
 

@@ -10,7 +10,7 @@ extends Control
 
 const ACTOR_SCENE := "res://scenes/actors/Actor.tscn"
 const TUNING_PATH := "res://tuning/field_tuning.tres"
-const FIELD_SCENE := "res://scenes/field/Field.tscn"
+const MAP_SCENE := "res://scenes/ui/WorldMap.tscn"
 const HANGUL_FONT := "res://fonts/Galmuri11.ttf"
 
 @onready var _world: Node2D = $World
@@ -119,28 +119,28 @@ func _object_slots(count: int) -> Array:
 
 # --- 동물 ------------------------------------------------------------------
 
+## ★ 마당에 있는 것은 **모아온 아이들**이지 데이터에 있는 종이 아니다.
+##   예전엔 "그림이 있는 모든 종" 을 뿌렸더니 아트가 들어올 때마다 식구가 늘었다
+##   (사용자 지적 — "껐다 킬 때마다 자꾸 집에 있는 동물이 늘어나고 있다").
 func _spawn_residents(species_by_id: Dictionary, view: FieldTuning) -> void:
-	for id in species_by_id:
-		var species: Dictionary = species_by_id[id]
-		if not SpriteLibrary.has_art(id):
+	for one in Game.collection:
+		var id := String(one["species_id"])
+		var species: Dictionary = species_by_id.get(id, {})
+		if species.is_empty():
+			# 저장에 있는데 지금 데이터에 없는 종 — 팩이 빠졌을 수 있다. 조용히 넘긴다.
 			continue
-		# 한두 마리씩 — 짝이 있는 종과 혼자인 종이 같은 마당에 있어야
-		# 하트와 반쪽 하트가 나란히 보인다 (BRIEF §2.4)
-		var count: int = _rng.randi_range(1, 2)
-		var sexes := Actor.roll_sexes(count, _rng)
-		for i in count:
-			var actor: Actor = load(ACTOR_SCENE).instantiate()
-			_actors.add_child(actor)
-			actor.setup(species, schema, view, _rng, String(sexes[i]))
-			actor.speed_tiles = view.wild_speed
-			actor.confine = yard.confine_resident
-			actor.position = Vector2(
-				_rng.randf_range(yard.yard.position.x + 24, yard.yard.end.x - 24),
-				_rng.randf_range(yard.yard.position.y + 12, yard.yard.end.y - 12))
-			var resident := Resident.new()
-			resident.actor = actor
-			resident.tags = Resident.tags_of(species)
-			residents.append(resident)
+		var actor: Actor = load(ACTOR_SCENE).instantiate()
+		_actors.add_child(actor)
+		actor.setup(species, schema, view, _rng, String(one["sex"]))
+		actor.speed_tiles = view.wild_speed
+		actor.confine = yard.confine_resident
+		actor.position = Vector2(
+			_rng.randf_range(yard.yard.position.x + 24, yard.yard.end.x - 24),
+			_rng.randf_range(yard.yard.position.y + 12, yard.yard.end.y - 12))
+		var resident := Resident.new()
+		resident.actor = actor
+		resident.tags = Resident.tags_of(species)
+		residents.append(resident)
 	_show_pair_marks()
 
 
@@ -238,7 +238,7 @@ func _check_gate() -> void:
 	if player.position.distance_to(yard.gate) > 18.0:
 		return
 	_leaving = true
-	get_tree().change_scene_to_file.call_deferred(FIELD_SCENE)
+	get_tree().change_scene_to_file.call_deferred(MAP_SCENE)
 
 
 # --- HUD — 재화와 자리 둘뿐 ---------------------------------------------------

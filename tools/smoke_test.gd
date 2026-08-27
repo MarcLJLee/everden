@@ -1137,6 +1137,73 @@ func _test_weather(field) -> void:
 			shadow_alpha = life["sprite"].modulate.a
 	_check("새 그림자는 반투명이다", shadow_alpha < 0.5, "%.2f" % shadow_alpha)
 
+	# ★ 풀과 나무는 바람에 흔들린다. **새 도트 없이** 가로줄을 정수 픽셀로 민다.
+	var source := SpriteLibrary.prop_texture("tuft")
+	_check("흔들릴 프롭 그림이 있다", source != null)
+	if source != null:
+		var upright := source.get_image()
+		var tilted := PlaceholderArt.swayed_texture(source, 2).get_image()
+		var height := upright.get_height()
+		var moved_root := false
+		for x in upright.get_width():
+			if upright.get_pixel(x, height - 1) != tilted.get_pixel(x, height - 1):
+				moved_root = true
+		_check("밑동은 안 움직인다 — 뿌리가 흔들리면 그건 바람이 아니다", not moved_root)
+		# 위로 갈수록 많이 밀린다
+		var top_shift := 0
+		for x in upright.get_width():
+			for y in 3:
+				if upright.get_pixel(x, y) != tilted.get_pixel(x, y):
+					top_shift += 1
+		_check("꼭대기는 밀린다", top_shift > 0, "%d 픽셀이 달라졌다" % top_shift)
+		# 색을 새로 만들지 않는다 — 미는 것이지 그리는 게 아니다
+		var palette := {}
+		for y in height:
+			for x in upright.get_width():
+				palette[upright.get_pixel(x, y)] = true
+		var invented := 0
+		for y in height:
+			for x in tilted.get_width():
+				if not palette.has(tilted.get_pixel(x, y)):
+					invented += 1
+		_check("색을 새로 만들지 않는다 — 미는 것이지 그리는 게 아니다", invented == 0,
+			"%d 픽셀" % invented)
+
+	# 바람이 세기와 빈도를 둘 다 정한다. 세지면 **기운 채로 떤다** (사용자 지적).
+	var swayers := []
+	for name in ["tuft", "flowers", "reed", "tree"]:
+		swayers.append({"name": name, "sprite": Sprite2D.new(), "position": Vector2(80, 80),
+			"lean": int(PropScatter._sway_spec(name).get("lean", 0)),
+			"hz": float(PropScatter._sway_spec(name).get("hz", 0.0)), "phase": 0.0, "at": 0})
+	_check("흔들림 표가 읽힌다", int(swayers[0]["lean"]) > 0)
+	var wide := Rect2(Vector2.ZERO, Vector2(400, 400))
+	var reach := {}
+	for wind in [0.0, 0.5, 1.0]:
+		var seen := []
+		for step in 400:
+			PropScatter.sway(swayers, float(step) * 0.05, wind, wide)
+			if not (int(swayers[3]["at"]) in seen):
+				seen.append(int(swayers[3]["at"]))
+		reach[wind] = seen
+	_check("무풍이면 안 흔들린다", reach[0.0] == [0], "%s" % [reach[0.0]])
+	var breezy: Array = reach[0.5]
+	_check("산들바람에는 좌우로 흔들린다",
+		breezy.min() < 0 and breezy.max() > 0, "%s" % [breezy])
+	var gale: Array = reach[1.0]
+	_check("센 바람에는 한쪽으로 기운 채 떤다", gale.min() > 0, "%s" % [gale])
+	_check("기우는 쪽은 구름·비가 흐르는 쪽과 같다 (+x)", gale.max() > 0)
+
+	# 안 흔들리는 것은 안 흔든다 — 바위가 흔들리면 그게 더 이상하다
+	for still in ["rock", "log", "bigrock", "pebbles"]:
+		_check("%s 는 안 흔들린다" % still,
+			int(PropScatter._sway_spec(still).get("lean", 0)) == 0)
+
+	# 화면 밖은 갈아끼우지 않는다
+	var far := [{"name": "tuft", "sprite": Sprite2D.new(), "position": Vector2(9000, 9000),
+		"lean": 1, "hz": 1.0, "phase": 0.0, "at": 0}]
+	PropScatter.sway(far, 3.7, 1.0, wide)
+	_check("화면 밖 프롭은 건드리지 않는다", int(far[0]["at"]) == 0)
+
 	# ★ 실제 날씨는 튀지 않는다 — 지금과 가까운 상태로만 옮겨간다 (사용자 지적)
 	var walker := WeatherSystem.new()
 	walker.setup(schema, RandomNumberGenerator.new(), {"초원": 2000, "숲": 600})

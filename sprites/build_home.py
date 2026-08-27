@@ -225,8 +225,11 @@ def _shadow(img, w):
     out.alpha_composite(sh); out.alpha_composite(img, (0, 0))
     return out
 
-def home_field(u=0.30):
-    """집 마당. 지형·프롭과 같은 규약 — 앵커는 바닥 중앙이고 Y-sort 대상이다."""
+def home_field(u=0.30, bare=False):
+    """집 마당. 지형·프롭과 같은 규약 — 앵커는 바닥 중앙이고 Y-sort 대상이다.
+
+    bare=True 는 **첫 만남**용이다 — 산 사물도, 사는 동물도, 플레이어도 없다.
+    첫 만남은 아무것도 없는 데서 시작해야 첫 친구가 사건이 된다 (§2.9)."""
     pal, tint = G.at_time(u)
     im = ground(pal)
     draw = []
@@ -258,18 +261,19 @@ def home_field(u=0.30):
     for name, x, yb in YARD_PROPS:
         c = G.OBJECTS[name]
         put(c.img(pal), x, yb, shadow=max(6, c.w - 8))
-    for name, x, yb in PLACED:
+    for name, x, yb in ([] if bare else PLACED):
         c = OBJECTS[name][0]
         put(c.img(pal), x, yb, shadow=max(8, c.w - 6))
 
-    for sp, palname, anim, x, yb in ANIMALS:
+    for sp, palname, anim, x, yb in ([] if bare else ANIMALS):
         fn = {("dog", "idle"): lambda: A.dog_side(0, "idle"),
               ("cat", "special"): lambda: A.cat_special(0),
               ("squirrel", "idle"): lambda: A.squirrel_side(0, "idle")}[(sp, anim)]
         put(fn().to_image(A.PALETTES[palname]), x, yb, shadow=16)
 
-    put(PL.compose("idle_0", PL.PALETTES["default"]), PLAYER_AT[0], PLAYER_AT[1] + 48,
-        shadow=14)
+    if not bare:
+        put(PL.compose("idle_0", PL.PALETTES["default"]), PLAYER_AT[0], PLAYER_AT[1] + 48,
+            shadow=14)
 
     for _, img, x, y in sorted(draw, key=lambda d: d[0]):
         im.alpha_composite(img, (x, y))

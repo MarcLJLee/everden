@@ -14,6 +14,9 @@ import build_bg as G
 import build_logo as L
 import build_title as TI
 import build_home as HM
+import build_screens as SC
+import build_weather as WX
+import build_field as FD
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "extracted")
 
@@ -36,7 +39,7 @@ def w(path, im):
 #   구현 세션이 내보낸 `extracted/player/` 37장 — 이 통째로 사라진다.
 #   생성기는 자기가 쓰는 자리만 지운다.
 OWNED = ("dog", "cat", "squirrel", "shared", "terrain", "props", "clues",
-         "food", "ui", "home")
+         "food", "ui", "home", "weather", "ambient") + tuple(A.SIDE_IDLE)
 
 def clear_owned():
     """소유 폴더의 png·json 만 지운다.
@@ -88,6 +91,23 @@ def main():
     for anim, fr in sq.items():
         w(f"{OUT}/squirrel/{anim}.png", strip(fr, sq_pal, 24))
 
+    # ── 나머지 여덟 종 — 측면 대기 + 측면 걷기 ────────────────────────
+    # §4.5 의 16장 중 **둘**이다. 남은 것은 남향·북향·특징 동작과 아기 전부.
+    # 걷기는 §4.6 대로 **다리만 바뀐다** — 몸을 위아래로 흔들지 않는다(바운스는 노드 Y).
+    for sp, fn in A.SIDE_IDLE.items():
+        pal = A.PALETTES[f"{sp}_default"]
+        cw = fn(0).w
+        w(f"{OUT}/{sp}/idle.png",      strip([fn(0), fn(1)], pal, cw))
+        w(f"{OUT}/{sp}/move_side.png", strip([fn(0, "walk"), fn(1, "walk")], pal, cw))
+
+    # ── 이형(암수) 파츠 — 눈·입과 같은 파츠 레이어다 (§4.9) ───────────
+    # ★ 몸통 시트를 성별로 나누지 않는다. 나누면 종당 16장이 32장이 된다.
+    for sp, spec in A.DIMORPH.items():
+        pal = A.PALETTES[f"{sp}_default"]
+        for angle in ("side", "front"):
+            c = spec["fn"](angle)
+            w(f"{OUT}/{sp}/dimorph_{spec['sex']}_{angle}.png", c.to_image(pal))
+
     # ── 눈 — 공용이 원칙이므로 shared/ 에 둔다 (§4.6) ─────────────────
     # ★ 눈 색(인덱스 7·8)은 종 팔레트에 있다. 엔진에서 눈 레이어도 몸통과 같은
     #   팔레트 셰이더를 통과시켜야 검은 털에서 눈이 저절로 밝아진다 (§4.3).
@@ -104,13 +124,27 @@ def main():
                 w(f"{OUT}/{sp}/eye_{angle}_{expr}.png", c.to_image(pal))
 
     # ── 표현 아이콘 ──────────────────────────────────────────────────
-    for kind in ("발견", "잠", "애정", "냄새", "소리"):
+    for kind in ("발견", "잠", "애정", "냄새", "소리", "시야"):
         c = A.icon_sprite(kind)
         pal = list(A.ICON_PALETTE); pal[A.MID] = A.ICON_ACCENT[kind] + (255,)
         im = c.to_image(pal)
         w(f"{OUT}/shared/emote_{kind}.png", im)
         if kind == "냄새":
             w(f"{OUT}/shared/emote_icon.png", im)   # 현재 emote_texture() 호환
+
+    # ── 방향 표시 — 공용 4장 (§4.5) ──────────────────────────────────
+    # ★ 발자국이 아니다. 지면 발자국은 "여기 지나갔다"라는 다른 뜻으로 이미 쓰인다.
+    for direction in A.DIRS:
+        c = A.dir_arrow(direction)
+        pal = list(A.ICON_PALETTE); pal[A.MID] = (244, 236, 224, 255)
+        w(f"{OUT}/shared/dir_{direction}.png", c.to_image(pal))
+
+    # ── 방향 표시 — 공용 4장 (§4.5) ──────────────────────────────────
+    # ★ 발자국이 아니다. 지면 발자국은 "여기 지나갔다"라는 다른 뜻으로 이미 쓰인다.
+    for direction in A.DIRS:
+        c = A.dir_arrow(direction)
+        pal = list(A.ICON_PALETTE); pal[A.MID] = (244, 236, 224, 255)
+        w(f"{OUT}/shared/dir_{direction}.png", c.to_image(pal))
 
     # ── 지형 타일 — 파일명이 TerrainMap 의 지형 이름 ─────────────────
     day = G.PALETTES["day"]
@@ -140,6 +174,13 @@ def main():
 
     # ── 집 — 건물 · 울타리 · 사물 ─────────────────────────────────────
     HM.save_all()
+    SC.save_ui()
+
+    # ── 날씨 — 이어 붙는 오버레이 타일 (§6.8) ────────────────────────
+    WX.save_all()
+
+    # ── 앰비언트 생물 — 수집 대상이 아니다 ────────────────────────────
+    FD.save_all()
 
     # ── 팔레트 — 밤낮은 이 값들을 보간해서 만든다 ────────────────────
     def rgba(p): return [list(G._rgba(x)) for x in p]
@@ -163,6 +204,47 @@ def main():
         "clue_by_trait": {k: f"clues/{k}.png" for k in
                           ("발자국","큰발자국","나무흔적","물자국","허물","털")},
         "clue_airborne": {"후각": "clues/냄새표시.png", "청각": "clues/소리표시.png"},
+        "direction_marks": {
+            "_comment": ("유도 방향 표시 (§4.5). **공용 4장, 종 수와 무관.** "
+                         "★ 발자국을 쓰지 말 것 — 지면 발자국은 '여기 지나갔다'(시야 단서)로 "
+                         "이미 쓰이고 있어서 한 화면에 두 뜻이 겹친다. "
+                         "감각 아이콘(무엇으로) + 화살표(어느 쪽) 로 나누면 2×4=8 이 아니라 2+4=6 이다."),
+            "files": {d: f"shared/dir_{d}.png" for d in A.DIRS},
+            "tint": ("흰색으로 구워뒀다. 감각 강조색으로 modulate 할 것 — "
+                     "코는 주황, 귀는 초록. 색만으로도 무엇이 찾았는지 읽힌다"),
+            "where": "동료 머리 위, 감각 아이콘 옆",
+        },
+        "direction_marks": {
+            "_comment": ("유도 방향 표시 (§4.5). **공용 4장, 종 수와 무관.** "
+                         "★ 발자국을 쓰지 말 것 — 지면 발자국은 '여기 지나갔다'(시야 단서)로 "
+                         "이미 쓰이고 있어서 한 화면에 두 뜻이 겹친다. "
+                         "감각 아이콘(무엇으로) + 화살표(어느 쪽) 로 나누면 2×4=8 이 아니라 2+4=6 이다."),
+            "files": {d: f"shared/dir_{d}.png" for d in A.DIRS},
+            "tint": ("흰색으로 구워뒀다. 감각 강조색(ICON_ACCENT)으로 modulate 할 것 — "
+                     "코는 주황, 귀는 초록. 색만으로도 무엇이 찾았는지 읽힌다"),
+            "where": "동료 머리 위. 감각 아이콘 옆에 붙는다",
+        },
+        "dimorphism": {
+            "_comment": ("암수 이형 (§4.9). **몸통 시트를 성별로 나누지 않는다** — "
+                         "눈·입과 같은 파츠 레이어로 얹고, 북향에서 숨기는 규칙도 그대로 쓴다. "
+                         "★ 종 이름으로 분기하지 말고 이 표에 있는지만 볼 것 (원칙 4)."),
+            "species": {sp: {"part": spec["part"], "shown_on": spec["sex"],
+                             "anchor": spec["anchor"],
+                             "file": {a: f"{sp}/dimorph_{spec['sex']}_{a}.png"
+                                      for a in ("side", "front")},
+                             "hide_on": "north"}
+                        for sp, spec in A.DIMORPH.items()},
+            "no_dimorphism": ("표에 없는 종은 **실제로 암수가 같게 생겼다.** "
+                              "리본이나 색으로 억지 구분을 만들지 않는다 — 그건 동물이 아니라 클리셰다. "
+                              "그 종의 성별은 이름표 뱃지(ui/sex_*.png)로만 보인다"),
+            "ivory_note": ("엄니는 인덱스 8(눈밝음)로 찍혀 있다. 털 팔레트가 바뀌어도 "
+                           "상아색으로 남는다 — 몸통과 같은 팔레트 셰이더를 통과시켜도 안전하다"),
+        },
+        "pair_ui": {"male": "ui/sex_male.png", "female": "ui/sex_female.png",
+                    "paired": "ui/pair_ok.png", "alone": "ui/pair_alone.png",
+                    "map_pin_pair": "ui/map_pin_pair.png",
+                    "_comment": ("규칙을 짊어지는 것은 ♂♀ 가 아니라 **하트**다 (원칙 3). "
+                                 "아이는 반쪽 하트를 보고 '얘는 혼자예요' 를 안다")},
     }
     with open(f"{OUT}/palettes.json", "w") as fp:
         json.dump(meta, fp, ensure_ascii=False, indent=2)

@@ -1,0 +1,146 @@
+{
+  "_comment": "날씨는 팔레트를 건드리지 않는다. 시간대 틴트에 **곱해지는** 틴트 한 겹 + 이어 붙는 오버레이 타일이다 (§6.8).",
+  "layer_order": [
+    "팔레트 보간(시간대)",
+    "오버레이 틴트(시간대×날씨)",
+    "구름 그림자(곱연산)",
+    "이펙트(비·눈·안개)",
+    "국소 광원"
+  ],
+  "integer_scroll_only": "디더 마스크는 정수 픽셀로만 스크롤할 것. 반픽셀이면 디더 무늬가 자글거린다",
+  "cloud_shadow": {
+    "file": "weather/cloud_shadow.png",
+    "tile": 320,
+    "blend": "multiply/alpha",
+    "always_on": true,
+    "note": "맑은 날에도 흐른다. 날씨가 '없는' 상태를 만들지 않는다"
+  },
+  "fog": {
+    "file": "weather/fog.png",
+    "tile": 256
+  },
+  "light_shaft": {
+    "file": "weather/light_shaft.png",
+    "tile": 128,
+    "period": 64,
+    "slope": 2,
+    "blend": "add",
+    "when": "낮에만 · 구름이 중간일 때 가장 세다",
+    "note": "구름이 아주 없으면 새어 나올 틈이 없고, 꽉 차면 빛이 못 뚫는다. **더하는 빛이라 알파로 세기를 준다** — 곱연산으로 깔지 말 것"
+  },
+  "sun_dapple": {
+    "reuse": "weather/cloud_shadow.png",
+    "note": "햇살 얼룩은 **구름 그림자와 같은 타일**을 위상만 어긋나게 해 밝게 더한 것이다. 구름 사이로 새는 빛이라 그림자와 짝이고 새로 그리는 도트가 0장이다 — 구현 세션이 발명했다",
+    "when": "맑을수록 세다 · 낮에만"
+  },
+  "rain": {
+    "file": "weather/rain.png",
+    "heavy": "weather/rain_heavy.png",
+    "tile": 64,
+    "splash": "weather/splash.png",
+    "splash_frames": 3
+  },
+  "snow": {
+    "far": "weather/snow_far.png",
+    "near": "weather/snow_near.png",
+    "tile": 96,
+    "note": "앞뒤 두 겹을 다른 속도로 흘린다"
+  },
+  "model": "날씨는 이름이 아니라 **축**이다. cloud · fog · rain · snow · wind 각각 0~1. 이름(맑음·폭우…)은 한 점에 붙인 별명일 뿐이다",
+  "axes": [
+    "cloud",
+    "fog",
+    "rain",
+    "snow",
+    "wind"
+  ],
+  "caps": {
+    "fog": 0.52,
+    "rain": 1.0,
+    "cloud": 0.46,
+    "why": "강도에 상한을 둔다. 짙은 안개에서 화면이 안 보이면 7살은 그냥 못 논다 — 날씨는 연출이지 장애물이 아니다"
+  },
+  "tint_from_axes": "틴트를 표로 적지 않는다. cloud*0.9 + rain*0.55 + snow*0.18 + fog*0.2 로 (0.66,0.73,0.88) 쪽으로 당긴다. 그래야 강도가 저절로 따라온다",
+  "presets": {
+    "맑음": {
+      "cloud": 0.15,
+      "fog": 0.0,
+      "rain": 0.0,
+      "snow": 0.0,
+      "wind": 0.3
+    },
+    "구름조금": {
+      "cloud": 0.28,
+      "fog": 0.0,
+      "rain": 0.0,
+      "snow": 0.0,
+      "wind": 0.38
+    },
+    "흐림": {
+      "cloud": 0.44,
+      "fog": 0.06,
+      "rain": 0.0,
+      "snow": 0.0,
+      "wind": 0.46
+    },
+    "옅은안개": {
+      "cloud": 0.12,
+      "fog": 0.22,
+      "rain": 0.0,
+      "snow": 0.0,
+      "wind": 0.1
+    },
+    "짙은안개": {
+      "cloud": 0.14,
+      "fog": 0.52,
+      "rain": 0.0,
+      "snow": 0.0,
+      "wind": 0.14
+    },
+    "가랑비": {
+      "cloud": 0.26,
+      "fog": 0.04,
+      "rain": 0.3,
+      "snow": 0.0,
+      "wind": 0.26
+    },
+    "비": {
+      "cloud": 0.32,
+      "fog": 0.06,
+      "rain": 0.62,
+      "snow": 0.0,
+      "wind": 0.38
+    },
+    "폭우": {
+      "cloud": 0.46,
+      "fog": 0.1,
+      "rain": 1.0,
+      "snow": 0.0,
+      "wind": 0.66
+    },
+    "진눈깨비": {
+      "cloud": 0.34,
+      "fog": 0.08,
+      "rain": 0.22,
+      "snow": 0.35,
+      "wind": 0.44
+    },
+    "눈": {
+      "cloud": 0.3,
+      "fog": 0.1,
+      "rain": 0.0,
+      "snow": 0.6,
+      "wind": 0.36
+    },
+    "함박눈": {
+      "cloud": 0.4,
+      "fog": 0.18,
+      "rain": 0.0,
+      "snow": 1.0,
+      "wind": 0.24
+    }
+  },
+  "wind_note": "`wind` 하나가 구름 방향 · 빗줄기 기울기 · 눈의 흐름을 동시에 정한다. 값이 따로 놀면 화면이 어긋나 보인다",
+  "sense_note": "§3.3 `weather_scale` 은 이름이 아니라 **축**에 걸 것. 그래야 '옅은 안개는 시야가 조금만 깎인다' 가 된다",
+  "season_note": "눈은 계절이 생긴 뒤에만 뽑을 것 (§7)"
+}

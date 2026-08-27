@@ -29,6 +29,14 @@ PALETTES = {
     "cat_black":    [(0,0,0,0),(24,22,28),(48,46,56),(70,68,80),(96,94,110),(150,148,162),(34,32,40),(18,16,22),(236,232,240)],
     "squirrel_default": [(0,0,0,0),(52,44,40),(104,92,84),(140,126,116),(176,162,150),(232,224,212),(64,54,48),(34,26,18),(244,236,224)],
     "squirrel_rare":    [(0,0,0,0),(96,58,26),(196,116,44),(226,150,64),(246,186,96),(255,238,196),(120,72,32),(34,26,18),(244,236,224)],
+    "raccoon_dog_default": [(0,0,0,0),(46,40,38),(86,76,70),(124,112,102),(162,150,138),(226,216,200),(58,50,46),(30,24,20),(240,234,224)],
+    "otter_default":    [(0,0,0,0),(44,32,24),(88,64,46),(120,90,64),(152,118,86),(212,192,164),(56,42,32),(30,24,18),(240,234,224)],
+    "water_deer_default": [(0,0,0,0),(72,48,30),(134,96,58),(174,130,80),(208,164,108),(240,226,198),(86,60,38),(32,26,18),(244,236,224)],
+    "leopard_cat_default": [(0,0,0,0),(70,50,32),(146,110,66),(186,146,88),(220,182,118),(244,232,206),(84,60,38),(30,24,18),(242,234,220)],
+    "toad_default":     [(0,0,0,0),(44,46,30),(84,88,52),(114,120,70),(146,152,92),(206,200,150),(58,60,38),(28,26,16),(238,236,210)],
+    "magpie_default":   [(0,0,0,0),(22,22,28),(40,40,50),(60,60,74),(88,88,106),(238,238,244),(46,44,40),(18,16,20),(236,232,240)],
+    "sparrow_default":  [(0,0,0,0),(62,48,34),(112,88,60),(148,120,84),(184,154,112),(226,212,186),(78,60,42),(30,24,18),(242,234,220)],
+    "snake_default":    [(0,0,0,0),(38,50,34),(74,94,58),(104,128,76),(138,166,98),(206,208,158),(52,64,40),(28,26,18),(238,236,210)],
 }
 
 # ── 캔버스 ────────────────────────────────────────────────────────────
@@ -380,6 +388,302 @@ def squirrel_south(frame):
     return c
 
 
+
+# ── 나머지 여덟 종 (1차 슬라이스 — 측면 대기만) ────────────────────────
+# §4.5 는 종당 16장(성체 10 + 아기 6)을 잡아뒀다. 여기 있는 것은 **그 중 측면 대기뿐**이다.
+# 도감·지도·팀 편성·타이틀이 전부 이 한 장에 물려 있어서 먼저 뚫는다 —
+# 나머지 방향은 그 종이 실제로 필드에 나갈 때 그린다.
+#
+# **실루엣이 전부다.** 32px 에서 색은 팔레트로 갈리지만 형태는 안 갈린다.
+# 종마다 "이것 하나로 알아본다" 를 정해두고 그 특징에 픽셀을 몰아준다:
+#
+#   너구리 = 눈가 마스크 + 통통한 몸 + 짧은 다리
+#   수달   = 길고 낮은 몸 + 굵은 꼬리          (개와 겹치지 않게 다리를 더 짧게)
+#   고라니 = 긴 다리 + 긴 목 + 큰 귀           (뿔이 없다 — 고라니의 특징이다)
+#   삵     = 고양이 골격 + 점무늬 + 굵은 줄무늬 꼬리
+#   두꺼비 = 넙적하고 낮다 + 옆으로 벌어진 뒷다리
+#   까치   = 검흰 대비 + 몸보다 긴 꼬리
+#   참새   = 작고 동글 + 짧은 꼬리
+#   뱀     = S자 + 다리 없음
+def _leg(c, x, top, bottom, w=2, v=MID, paw=True):
+    c.rect(x, top, x+w-1, bottom, v)
+    if paw: c.rect(x, bottom-1, x+w-1, bottom, PAW)
+
+def _stripes(c, pts, v=DARK):
+    for (x, y, w) in pts: c.rect(x, y, x+w-1, y, v)
+
+
+# ★ 걷기 = **다리만 바뀐다.** 몸을 위아래로 흔들지 않는다 — 바운스는 노드 Y 다 (§4.6).
+#   대기는 흔들림이 1px, 걷기는 4px. 같은 함수에 pose 만 다르게 준다.
+def _gait(frame, pose, near=(10, 18), spread=4):
+    """(뒷다리 x, 앞다리 x, 먼쪽 다리 오프셋)"""
+    b, f = near
+    if pose == "walk":
+        return (b - spread//2, f + spread//2, 2) if frame == 0 else \
+               (b + spread//2, f - spread//2, -2)
+    return (b, f, 1 if frame else 0)
+
+
+# 너구리 — 중형 32
+def raccoon_side(frame=0, pose="idle"):
+    c = Canvas(32, 32)
+    BY, FY = 18, 27
+    for i in range(6):                                   # 복슬 꼬리 (줄무늬)
+        a = math.radians(196 + i*14)
+        c.ellipse(7.4 + math.cos(a)*4.6, 15.4 + math.sin(a)*3.4, 2.4, 2.2,
+                  DARK if i % 2 else MID)
+    bx, fx, fo = _gait(frame, pose, (10, 18))
+    _leg(c, bx + fo, BY+3, FY, 2, DARK, False)
+    _leg(c, fx - fo, BY+3, FY, 2, DARK, False)
+    c.ellipse(14.5, BY, 8.2, 5.4, MID)                   # 통통한 몸
+    c.ellipse(14.5, BY+3.2, 6.6, 2.0, BELLY)
+    _leg(c, bx, BY+3, FY, 3, MID)
+    _leg(c, fx, BY+3, FY, 3, MID)
+    c.ellipse(23.4, 13.6, 5.4, 4.6, MID)                 # 머리
+    c.ellipse(27.4, 15.0, 2.6, 1.8, BELLY)               # 뾰족한 주둥이
+    c.ellipse(29.0, 14.6, 1.0, 0.8, PAW)
+    c.ellipse(22.2, 13.4, 2.6, 2.2, DARK)                # ★ 눈가 마스크
+    c.ellipse(26.0, 13.0, 1.8, 1.6, DARK)
+    c.ellipse(21.0, 10.0, 1.8, 1.6, DARK)                # 작고 둥근 귀
+    c.ellipse(25.4, 9.8, 1.8, 1.6, DARK)
+    c.shade_top_light(); c.outline_pass()
+    return c
+
+
+# 수달 — 중형 32
+def otter_side(frame=0, pose="idle"):
+    c = Canvas(32, 32)
+    BY, FY = 20, 26
+    for i in range(8):                                   # 굵고 긴 꼬리 — 뒤로 곧게
+        c.ellipse(2.0 + i*1.5, 21.4 - i*0.28, 2.6 - i*0.18, 2.4 - i*0.16, MID)
+    bx, fx, fo = _gait(frame, pose, (12, 20), spread=3)
+    _leg(c, bx + fo, BY+2, FY, 2, DARK, False)
+    _leg(c, fx - fo, BY+2, FY, 2, DARK, False)
+    c.ellipse(16.5, BY, 9.6, 4.0, MID)                   # ★ 길고 낮은 몸
+    c.ellipse(16.5, BY+2.2, 7.6, 1.4, BELLY)
+    _leg(c, bx, BY+2, FY, 3, MID)                        # 아주 짧은 다리
+    _leg(c, fx, BY+2, FY, 3, MID)
+    c.ellipse(25.6, 17.0, 4.4, 3.8, MID)                 # 둥근 머리
+    c.ellipse(29.0, 18.2, 2.2, 1.6, BELLY)               # 넓적한 주둥이
+    c.ellipse(30.0, 17.8, 1.0, 0.9, PAW)
+    c.ellipse(23.4, 14.4, 1.4, 1.2, DARK)                # 아주 작은 귀
+    c.shade_top_light(); c.outline_pass()
+    return c
+
+
+# 고라니 — 대형 48
+def deer_side(frame=0, pose="idle"):
+    c = Canvas(48, 48)
+    BY, FY = 27, 41
+    bx, fx, fo = _gait(frame, pose, (14, 30), spread=6)
+    _leg(c, bx + fo, BY+4, FY, 2, DARK, False)
+    _leg(c, fx - fo, BY+4, FY, 2, DARK, False)
+    for i in range(5):                                   # 짧은 꼬리
+        c.ellipse(9.0 - i*0.7, 25.0 - i*0.9, 1.8, 1.6, MID)
+    c.ellipse(22, BY, 10.6, 6.0, MID)                    # 몸
+    c.ellipse(22, BY+3.6, 8.4, 2.2, BELLY)
+    _leg(c, bx, BY+4, FY, 3, MID)                        # ★ 긴 다리
+    _leg(c, fx, BY+4, FY, 3, MID)
+    # ★ 목은 다섯 마디까지다. 여덟 마디를 쌓았더니 고라니가 아니라 기린이 됐다 —
+    #   고라니는 **다리가 길지 목이 길지 않다.**
+    for i in range(5):
+        c.ellipse(31.0 + i*1.1, 22.4 - i*1.5, 3.2 - i*0.16, 3.2 - i*0.16, MID)
+    c.ellipse(37.4, 15.4, 4.2, 3.6, MID)                 # 작은 머리
+    c.ellipse(41.4, 16.8, 2.6, 1.9, BELLY)               # 긴 주둥이
+    c.ellipse(43.0, 16.4, 1.0, 0.9, PAW)
+    c.ellipse(34.6, 11.4, 1.7, 3.2, MID)                 # ★ 큰 귀 (뿔은 없다)
+    c.ellipse(38.6, 10.8, 1.7, 3.2, MID)
+    c.shade_top_light(); c.outline_pass()
+    return c
+
+
+# 삵 — 중형 32
+def leopardcat_side(frame=0, pose="idle"):
+    c = Canvas(32, 32)
+    BY, FY = 18, 27
+    # 꼬리는 **몸에서 확실히 떨어져** 나가야 보인다. 몸에 붙여 말면 사라진다
+    for i in range(7):                                   # 굵은 꼬리 + 고리 무늬
+        c.ellipse(7.6 - i*0.9, 16.4 - i*1.3, 2.4, 2.1, DARK if i % 2 else MID)
+    bx, fx, fo = _gait(frame, pose, (11, 19))
+    _leg(c, bx + fo, BY+3, FY, 2, DARK, False)
+    _leg(c, fx - fo, BY+3, FY, 2, DARK, False)
+    c.ellipse(15, BY, 8.6, 4.8, MID)                     # 고양이 골격, 조금 길게
+    c.ellipse(15, BY+3.0, 6.8, 1.8, BELLY)
+    _leg(c, bx, BY+3, FY, 3, MID)
+    _leg(c, fx, BY+3, FY, 3, MID)
+    for (x, y) in ((11,15),(15,14),(19,15),(13,18),(17,18),(21,17),(9,17)):
+        c.ellipse(x, y, 1.2, 1.0, DARK)                  # ★ 점무늬
+    c.ellipse(23.8, 13.6, 4.8, 4.4, MID)
+    c.ellipse(27.4, 15.0, 1.8, 1.4, BELLY)               # 고양이처럼 짧은 주둥이
+    c.ellipse(28.4, 14.6, 0.9, 0.7, PAW)
+    # ★ 이마 줄무늬 + 뾰족 귀를 같이 그렸더니 모히칸이 됐다. 줄무늬는 뺀다 —
+    #   32px 에서 머리 위에 두 가지를 겹칠 자리가 없다
+    _tri_up(c, 20.8, 10.8, 2.0, 3.0, MID)                # 뾰족 귀
+    _tri_up(c, 26.2, 10.6, 2.0, 3.0, MID)
+    c.shade_top_light(); c.outline_pass()
+    return c
+
+
+# 두꺼비 — 소형 24
+def toad_side(frame=0, pose="idle"):
+    """★ 처음엔 낮은 타원 하나로 그렸더니 **덤불로 보였다.**
+    두꺼비는 **앞을 든 자세**여야 두꺼비다 — 앞다리로 상체를 받치고,
+    뒷다리는 뒤로 접혀 옆으로 벌어진다. 눈두덩이 머리 위로 솟아야 한다."""
+    c = Canvas(24, 24)
+    c.ellipse(9.6, 15.2, 6.2, 4.0, MID)                  # 엉덩이 쪽 몸통
+    c.ellipse(5.2, 15.0, 3.4, 3.2, MID)                  # 접힌 뒷다리 덩어리
+    if pose == "walk" and frame == 1:                    # 폴짝 — 뒷다리를 뻗는다
+        c.rect(1, 16, 7, 17, MID); c.rect(0, 17, 6, 18, PAW)
+    else:
+        c.rect(2, 17, 7, 18, MID); c.rect(1, 18, 7, 19, PAW)   # 뒷발 — 옆으로 길게
+    c.ellipse(15.0, 13.6, 4.6, 3.4, MID)                 # 들린 앞가슴
+    c.ellipse(11.5, 17.0, 5.4, 1.6, BELLY)               # 배
+    if pose == "walk" and frame == 1:
+        c.rect(17, 14, 18, 17, MID); c.rect(16, 17, 20, 18, PAW)
+    else:
+        c.rect(16, 15, 17, 18, MID)                      # 앞다리 — 상체를 받친다
+        c.rect(15, 18, 19, 19, PAW)
+    c.ellipse(18.0, 11.6, 3.6, 3.0, MID)                 # 머리
+    c.ellipse(20.6, 12.8, 1.8, 1.2, BELLY)               # 넓은 입
+    c.ellipse(17.2, 8.8, 2.0, 1.8, MID)                  # ★ 솟은 눈두덩
+    c.ellipse(20.0, 9.4, 1.6, 1.4, MID)
+    for (x, y) in ((7,12),(10,11),(12,13),(8,15),(13,15),(5,13)):
+        c.set(x, y, DARK)                                # 오돌토돌
+    if frame:
+        c.ellipse(11.5, 16.6, 5.2, 1.4, BELLY)           # 숨 쉬는 배
+    c.shade_top_light(); c.outline_pass()
+    return c
+
+
+# 까치 — 소형 24
+def magpie_side(frame=0, pose="idle"):
+    c = Canvas(24, 24)
+    for i in range(9):                                   # ★ 몸보다 긴 꼬리
+        c.ellipse(2.0 + i*1.0, 18.4 - i*0.62, 1.8 - i*0.06, 1.5, DARK)
+    c.ellipse(13.5, 13.6, 5.2, 4.6, DARK)                # 몸
+    c.ellipse(13.0, 15.0, 3.6, 2.6, BELLY)               # ★ 흰 배
+    c.ellipse(10.4, 12.4, 3.0, 2.2, BELLY)               # ★ 흰 어깨
+    c.ellipse(17.4, 9.4, 3.4, 3.0, DARK)                 # 머리
+    c.blob([(20,9),(21,9),(20,10),(21,10),(22,10)], PAW)  # 부리
+    sp = 4 if (pose == "walk" and frame == 1) else 3     # 뛸 때 다리가 벌어진다
+    _leg(c, 13 - sp//2, 17, 21, 1, PAW, False)           # 가는 다리 둘
+    _leg(c, 13 + sp//2, 17, 21, 1, PAW, False)
+    c.rect(12-sp//2, 20, 14-sp//2, 21, PAW)
+    c.rect(12+sp//2, 20, 14+sp//2, 21, PAW)
+    if frame: c.ellipse(11.4, 12.0, 2.6, 1.8, BELLY)
+    c.shade_top_light(); c.outline_pass()
+    return c
+
+
+# 참새 — 소형 24
+def sparrow_side(frame=0, pose="idle"):
+    c = Canvas(24, 24)
+    for i in range(4):                                   # ★ 짧은 꼬리
+        c.ellipse(6.4 - i*0.9, 15.0 - i*0.5, 1.8, 1.4, DARK)
+    c.ellipse(13.0, 14.0, 4.6, 4.2, MID)                 # ★ 작고 동글한 몸
+    c.ellipse(12.6, 15.4, 3.2, 2.4, BELLY)
+    c.ellipse(16.0, 10.4, 3.4, 3.0, MID)                 # 머리
+    c.edge_lower(16.0, 10.4, 3.4, 3.0)                   # 머리 아래 윤곽 — 몸과 분리
+    c.ellipse(14.4, 9.2, 2.0, 1.5, DARK)                 # 정수리 얼룩
+    c.blob([(19,10),(20,10),(21,10),(19,11),(20,11)], PAW)   # 짧고 두툼한 부리
+    sp = 4 if (pose == "walk" and frame == 1) else 2
+    _leg(c, 13 - sp//2, 17, 20, 1, PAW, False)
+    _leg(c, 13 + sp//2, 17, 20, 1, PAW, False)
+    c.rect(12-sp//2, 19, 14-sp//2, 20, PAW)
+    c.rect(12+sp//2, 19, 14+sp//2, 20, PAW)
+    if frame: c.ellipse(9.6, 13.6, 2.2, 1.6, DARK)       # 날개 접었다 폈다
+    c.shade_top_light(); c.outline_pass()
+    return c
+
+
+# 뱀 — 소형 24
+def snake_side(frame=0, pose="idle"):
+    c = Canvas(24, 24)
+    wob = (0.0 if frame == 0 else 1.9) if pose == "walk" else (0.0 if frame == 0 else 0.5)
+    for i in range(26):                                  # ★ S자 — 다리가 없다
+        t = i / 25.0
+        x = 2.5 + t*17.0
+        y = 17.0 - math.sin(t*math.pi*1.9 + wob)*4.2
+        r = 2.3 - abs(t-0.35)*1.1
+        c.ellipse(x, y, max(1.1, r), max(1.0, r*0.92), MID)
+    for i in range(6):                                   # 등 무늬
+        t = 0.15 + i*0.13
+        x = 2.5 + t*17.0
+        y = 17.0 - math.sin(t*math.pi*1.9 + wob)*4.2
+        c.ellipse(x, y - 0.6, 1.0, 0.8, DARK)
+    # 머리가 몸통과 같은 굵기면 어디가 머리인지 모른다 — **확실히 굵게** 그린다
+    hx = 2.5 + 1.0*17.0
+    hy = 17.0 - math.sin(1.0*math.pi*1.9 + wob)*4.2
+    c.ellipse(hx, hy, 3.4, 2.6, MID)                     # 삼각 머리
+    c.ellipse(hx + 1.4, hy, 2.2, 1.8, LIGHT)             # 주둥이 밝게
+    tx, ty = int(hx) + 4, int(hy)
+    c.set(tx, ty, PAW); c.set(tx+1, ty, PAW)             # 갈라진 혀
+    c.set(tx+2, ty-1, PAW); c.set(tx+2, ty+1, PAW)
+    c.shade_top_light(); c.outline_pass()
+    return c
+
+
+SIDE_IDLE = {
+    "raccoon_dog": raccoon_side, "otter": otter_side, "water_deer": deer_side,
+    "leopard_cat": leopardcat_side, "toad": toad_side, "magpie": magpie_side,
+    "sparrow": sparrow_side, "snake": snake_side,
+}
+
+
+# ── 이형(암수) 파츠 (§4.9) ─────────────────────────────────────────────
+# ★ 암수를 **몸통 시트로 나누지 않는다.** 나누는 순간 종당 16장이 32장이 된다.
+#   눈·입과 같은 **파츠 레이어**로 얹는다 — 북향에서 숨기는 규칙까지 그대로 재사용한다.
+#   ★ 종 이름으로 분기하지 않는다(원칙 4). 엔진은 `DIMORPH` 에 그 종이 있는지만 본다.
+
+def _px(rows, mapping, w=None, h=None):
+    """ASCII 로 찍는다. 파츠는 작아서 타원보다 손으로 찍는 편이 정확하다."""
+    h = h or len(rows); w = w or max(len(r) for r in rows)
+    c = Canvas(w, h)
+    for y, r in enumerate(rows):
+        for x, ch in enumerate(r):
+            if ch in mapping: c.set(x, y, mapping[ch])
+    return c
+
+
+def deer_tusk(angle):
+    """고라니 수컷의 **엄니**(송곳니). 고라니는 뿔이 없고 수컷에게 긴 송곳니가 있다 —
+    실존 생태 그대로다(§3.8). 32~48px 에서 실루엣으로 읽히는 몇 안 되는 이형이다.
+
+    ★ 상아색은 **인덱스 8(눈밝음)** 으로 찍는다. 털색 팔레트가 뭐로 바뀌든
+      엄니는 상아색으로 남아야 한다 — 검은 털 고라니를 만들어도 엄니는 희다."""
+    I, O = EYEL, OUTLINE
+    if angle == "side":
+        # ★ 처음엔 2px 를 여섯 줄 세웠더니 **턱받이로 보였다.** 엄니는 가늘다 —
+        #   위 2px, 아래 1px 로 가늘어지고 **뒤로 휘어야** 이빨로 읽힌다.
+        #   뒤쪽 모서리에 외곽선을 붙여야 크림색 배(BELLY)에 안 묻는다.
+        return _px([
+            "..II",
+            "..II",
+            ".oII",
+            ".oI.",
+            ".oI.",
+            "..o.",
+        ], {"I": I, "o": O})
+    # 정면 — 좌우 한 쌍. 주둥이가 좁으니 **가운데를 넓게** 비운다.
+    return _px([
+        "I...I",
+        "I...I",
+        "I...I",
+        "o...o",
+    ], {"I": I, "o": O})
+
+
+DIMORPH = {
+    # 종 id: (파츠 이름, 보이는 성별, 그리는 함수, 몸통 좌표 앵커)
+    #   앵커는 파츠 캔버스의 **왼쪽 위**가 몸통 캔버스의 어디에 놓이는가다.
+    #   측면 앵커는 동물이 오른쪽(E)을 볼 때 기준 — 미러하면 x 를 뒤집는다.
+    "water_deer": {"part": "엄니", "sex": "male", "fn": deer_tusk,
+                   "anchor": {"side": [41, 19], "front": [21, 20]}},
+}
+# 나머지 열 종은 **이형이 없다** — 실제로 암수가 같게 생겼다.
+# 없는 종에 억지로 리본이나 색을 붙이지 않는다. 그건 동물이 아니라 클리셰다.
+
+
 # ── 눈 레이어 (공용 · 종 수와 무관) ────────────────────────────────────
 # §4.6 — 각도는 정면/측면 2개면 충분하다. 북향은 레이어를 숨긴다.
 def eye_sprite(style, expr, angle):
@@ -420,9 +724,35 @@ def eye_sprite(style, expr, angle):
 EYE_PALETTE = [(0,0,0,0)]*7 + [(28,22,16,255), (250,246,238,255)]
 
 
+# ── 방향 표시 (§4.5 v3.16 · v3.19) ─────────────────────────────────────
+# ★ **발자국을 쓰지 않는다.** 지면 발자국은 이미 "여기 지나갔다"(시야 단서)라는 뜻으로
+#   쓰이고 있다. 같은 그림에 두 뜻을 얹으면 아이가 헷갈린다 —
+#   한 화면에 지면 발자국과 방향 발자국이 같이 뜨는 경우가 실제로 생긴다.
+# ★ 감각 아이콘(무엇으로 찾았나) + 방향 화살표(어느 쪽인가) 로 **나눈다.**
+#   나누면 2 감각 × 4 방향 = 8 이 아니라 **2 + 4 = 6** 이다 — 곱셈을 덧셈으로 바꾸는 자리.
+DIRS = ("north", "south", "east", "west")
+
+def dir_arrow(direction):
+    """공용 4장. 강조색은 감각을 따라간다 — 코는 주황, 귀는 초록(ICON_ACCENT)."""
+    c = Canvas(11, 11)
+    A_ = MID                                    # 강조색 자리
+    for r in range(4):                          # 삼각 머리
+        if direction == "north":   c.rect(5-r, 1+r, 5+r, 1+r, A_)
+        elif direction == "south": c.rect(5-r, 9-r, 5+r, 9-r, A_)
+        elif direction == "east":  c.rect(9-r, 5-r, 9-r, 5+r, A_)
+        else:                      c.rect(1+r, 5-r, 1+r, 5+r, A_)
+    # 꼬리 — 없으면 화살표가 아니라 그냥 삼각형이다
+    if direction == "north":   c.rect(4, 5, 6, 10, A_)
+    elif direction == "south": c.rect(4, 0, 6, 5, A_)
+    elif direction == "east":  c.rect(0, 4, 5, 6, A_)
+    else:                      c.rect(5, 4, 10, 6, A_)
+    return c
+
+
 # ── 표현 아이콘 (공용 16×16) ───────────────────────────────────────────
 ICON_PALETTE = [(0,0,0,0),(24,30,38,255),(0,0,0,0),(0,0,0,0),(0,0,0,0),(0,0,0,0),(0,0,0,0),(0,0,0,0),(244,236,224,255)]
-ICON_ACCENT  = {"발견":(233,164,65),"잠":(140,166,200),"애정":(224,99,126),"냄새":(233,164,65),"소리":(134,171,85)}
+ICON_ACCENT  = {"발견":(233,164,65),"잠":(140,166,200),"애정":(224,99,126),
+                "냄새":(233,164,65),"소리":(134,171,85),"시야":(126,178,214)}
 
 def icon_sprite(kind):
     c = Canvas(16, 16)
@@ -448,6 +778,12 @@ def icon_sprite(kind):
             c.set(x, y, OUTLINE)                      # 콧구멍 (바깥 위 → 안쪽 아래로 기운 쉼표)
         c.set(6, 11, OUTLINE); c.set(10, 10, OUTLINE)
         c.rect(8, 11, 8, 13, OUTLINE)                 # 인중
+    elif kind == "시야":                              # 눈 (시야)
+        # 감각 셋 중 시야만 아이콘이 없었다. 후각(코)·청각(귀) 옆에 놓일 물건이라
+        # 같은 무게로 보여야 한다 — 눈꺼풀 두 획 + 동공.
+        c.ellipse(8, 8, 6.8, 4.2, A)                  # 렌즈
+        c.ellipse(8, 8, 5.4, 2.8, TRANSPARENT)        # 속을 비워 테두리만 남긴다
+        c.ellipse(8, 8, 2.4, 2.4, A)                  # 동공
     elif kind == "소리":                              # 귀 (청각)
         c.ellipse(8.4, 7.6, 5.0, 5.4, A)              # 귀 바깥
         c.ellipse(9.4, 8.2, 2.4, 3.2, TRANSPARENT)    # 안쪽 홈

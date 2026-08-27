@@ -967,5 +967,7 @@ godot --headless --export-release "macOS" build/EVERDEN.app
 > `sprites/extracted/**` 의 게임 아트까지 통째로 날린다 — 실제로 그렇게
 > **그래픽이 하나도 없는 빌드**가 나갔다. `exclude_filter` 에 리뷰 시트를
 > **하나씩** 적는다. 설계 세션이 시트를 새로 내보내면 그때 목록에 더한다.
+> ⚠️ **`sprites/extracted/` 에는 게임이 읽는 것만 둔다.** 원본 백업을 거기 뒀다가
+> exe 에 17장이 딸려 들어갔다 — `sprites/_player_original/` 로 빼고 제외 목록에 넣었다.
 > ⚠️ `.txt` · `.md` 는 `all_resources` 로 안 딸려 온다. 갈무리 SIL OFL 라이선스는
 > `include_filter` 에 따로 적어야 한다 — 안 적었더니 첫 빌드에 라이선스가 빠졌다.

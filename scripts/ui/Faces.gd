@@ -17,11 +17,12 @@ static var _cache := {}
 
 
 ## 그 종의 얼굴 한 장. 없으면 null.
-static func of(species: Dictionary) -> Texture2D:
+static func of(species: Dictionary, schema: TagSchema = null) -> Texture2D:
 	var id := String(species.get("id", ""))
 	if _cache.has(id):
 		return _cache[id]
-	var canvas := SpriteLibrary.canvas_for(id, Vector2i(32, 32))
+	# ⚠️ 캔버스 크기를 못 박지 않는다 — 종마다 다르고, 틀리면 옆 프레임이 딸려 온다.
+	var canvas := SpriteLibrary.canvas_of(species, schema)
 	var frames: Dictionary = SpriteLibrary.body_frames(species, canvas)
 	var sheet: SpriteFrames = frames["frames"]
 	if sheet == null or not sheet.has_animation("idle") or sheet.get_frame_count("idle") == 0:
@@ -49,11 +50,11 @@ static func of(species: Dictionary) -> Texture2D:
 
 ## 얼굴 + **기쁨 눈**. 목적지를 좋아할 동료를 이걸로 보여준다 —
 ## 유불리를 말하지 않고 **그 아이의 기분**만 말한다 (§3.9).
-static func glad(species: Dictionary) -> Texture2D:
+static func glad(species: Dictionary, schema: TagSchema = null) -> Texture2D:
 	var id := "glad:" + String(species.get("id", ""))
 	if _cache.has(id):
 		return _cache[id]
-	var face := of(species)
+	var face := of(species, schema)
 	if face == null:
 		_cache[id] = null
 		return null

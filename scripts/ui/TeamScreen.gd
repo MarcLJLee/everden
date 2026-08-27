@@ -109,7 +109,7 @@ func _refresh() -> void:
 		var going := int(one["uid"]) in Game.party
 		var here := i == _at and not _on_go
 
-		var face := Faces.place(_art, Faces.of(config), Vector2(x, ROW_Y), 2)
+		var face := Faces.place(_art, Faces.of(config, _schema), Vector2(x, ROW_Y), 2)
 		if face != null:
 			face.modulate = Color.WHITE if going else Color(1, 1, 1, 0.45)
 		# 지금 커서가 있는 자리 — 발바닥으로 가리킨다 (로고·메뉴와 같은 그림)
@@ -180,11 +180,11 @@ func _show_destination() -> void:
 		if not (id in Game.seen):
 			unmet = true
 			continue
-		Faces.place(_art, Faces.of(_species.get(id, {})), Vector2(x, 246), 1)
+		Faces.place(_art, Faces.of(_species.get(id, {}), _schema), Vector2(x, 246), 1)
 		x += 22.0
 	if unmet:
 		# 못 만난 게 있으면 **실루엣 하나.** 몇 종인지 세지 않는다 — 그건 스포일러다.
-		Faces.place(_art, Faces.unknown(Faces.of(_species.get("squirrel", {}))),
+		Faces.place(_art, Faces.unknown(Faces.of(_species.get("squirrel", {}), _schema)),
 			Vector2(x + 4, 246), 1)
 
 

@@ -195,7 +195,11 @@ func _spawn_point(species: Dictionary, player_position: Vector2, min_distance: f
 			var point := _terrain.random_point_in(species.get("habitat", []), _rng)
 			if point != Vector2.ZERO and point.distance_to(player_position) >= min_distance:
 				return point
-	return _random_point_away_from(player_position, min_distance)
+	# ⚠️ 못 찾았으면 아무 데나 두지 않는다 — 살 수 없는 지형에 놓이면 그대로 갇힌다.
+	var fallback := _random_point_away_from(player_position, min_distance)
+	if _terrain == null:
+		return fallback
+	return _terrain.nearest_standing(fallback, _schema, species.get("habitat", []))
 
 
 func update(delta: float, player_position: Vector2) -> void:

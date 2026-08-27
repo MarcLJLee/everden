@@ -40,11 +40,12 @@ func show_for(one: Dictionary, species: Dictionary, is_new: bool,
 	var middle := 320.0
 
 	# 몸 — 있는 그림을 정수배로 키운다
-	var frames: Dictionary = SpriteLibrary.body_frames(species, SpriteLibrary.canvas_for(
-		String(species.get("id", "")), Vector2i(32, 32)))
+	var frames: Dictionary = SpriteLibrary.body_frames(species,
+		SpriteLibrary.canvas_of(species, schema))
 	var sheet: SpriteFrames = frames["frames"]
 	if sheet != null and sheet.has_animation("idle") and sheet.get_frame_count("idle") > 0:
 		var body := Sprite2D.new()
+		body.name = "Body"
 		body.texture = sheet.get_frame_texture("idle", 0)
 		body.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		var grow: int = clampi(int(BODY_HEIGHT / maxf(body.texture.get_height(), 1.0)), 2, 4)

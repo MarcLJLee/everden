@@ -23,6 +23,7 @@ const WEATHER_MARGIN := 1.6
 @onready var _ambient: AmbientLife = $AmbientAir
 @onready var _card: CanvasLayer = $InviteCard
 @onready var _go_home: CanvasLayer = $GoHome
+@onready var _hud: CanvasLayer = $FieldHud
 @onready var _camera: Camera2D = $Camera2D
 @onready var _overlay = $DebugOverlay
 @onready var _modulate: CanvasModulate = $CanvasModulate
@@ -50,6 +51,7 @@ var _clues: Array = []
 var _puffs: Array = []
 var _promotion_px := 0.0
 var _props: Array = []
+var _region_name := ""
 var _last_weather_name := ""
 ## 지금 원정 중인 지역. 세계 지도가 생기면 거기서 정해진다 (BRIEF §3.9).
 @export var region_id := "home_hills"
@@ -108,6 +110,7 @@ func _ready() -> void:
 	sim.setup(_actors, actor_scene, schema, tuning, _rng, _bounds, terrain, _promotion_px)
 	# 이 필드가 어느 지역인가. 지역이 늘면 여기만 갈아끼운다.
 	sim.region = region
+	_region_name = String(region.get("name", ""))
 	# 짝 없이 혼자인 종이 있으면 그 종의 반대 성별이 반드시 정의된다 (BRIEF §2.4 확정 배치)
 	sim.pair_needed = Game.lonely_species()
 
@@ -122,6 +125,9 @@ func _ready() -> void:
 	# ★ **나가는 길.** 이게 없어서 원정을 나가면 못 돌아왔다 (BRIEF §3.13).
 	#   여는 키는 저쪽이 갖는다 — 양쪽이 같은 키를 보면 열자마자 닫힌다.
 	_go_home.faces_provider = _going_home_faces
+	_go_home.schema_provider = func() -> TagSchema: return schema
+	# 늘 보이는 것은 **지명과 자리 둘뿐**이다 (BRIEF §3.4).
+	_hud.refresh(String(region.get("name", "")), Game.collection.size(), tuning.home_seats)
 	_go_home.go_home.connect(func() -> void:
 		get_tree().call_deferred("change_scene_to_file", "res://scenes/home/Home.tscn"))
 	_weather_layers.build()
@@ -178,6 +184,7 @@ func _process(delta: float) -> void:
 	_apply_eyeshine()
 	_update_interaction(delta)
 	metrics.update(delta)
+	_hud.refresh(String(_region_name), Game.collection.size(), tuning.home_seats)
 	_overlay.refresh(_build_state())
 
 
@@ -200,7 +207,8 @@ func _spawn_player() -> void:
 		},
 	}
 	player = _make_actor(config)
-	player.position = _bounds.size * 0.5
+	# ⚠️ 한가운데가 물이나 바위면 그대로 갇힌다 — 설 수 있는 가장 가까운 자리로 옮긴다.
+	player.position = terrain.nearest_standing(_bounds.size * 0.5, schema, [])
 	player.speed_tiles = tuning.move_speed
 	# 물가·바위는 못 밟는다. **동물에게는 걸리지 않는다** — 서식지이기 때문이다.
 	# 교감은 근처에서 되므로 물가에 선 수달을 물가 밖에서 부를 수 있다.
@@ -625,7 +633,8 @@ func _restart_run() -> void:
 		if animal.is_active():
 			animal.actor.queue_free()
 	sim.animals.clear()
-	player.position = _bounds.size * 0.5
+	# ⚠️ 한가운데가 물이나 바위면 그대로 갇힌다 — 설 수 있는 가장 가까운 자리로 옮긴다.
+	player.position = terrain.nearest_standing(_bounds.size * 0.5, schema, [])
 	for companion in companions:
 		companion.position = player.position + Vector2(-tuning.tile_size, 8)
 		companion.hide_sense_icon()

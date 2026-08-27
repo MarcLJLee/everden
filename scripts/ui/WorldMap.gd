@@ -280,7 +280,7 @@ func _show_mood(region: Dictionary) -> void:
 		if not glad:
 			continue
 		glad_any = true
-		Faces.place(_panel, Faces.glad(config), Vector2(x, 240), 2)
+		Faces.place(_panel, Faces.glad(config, _schema), Vector2(x, 240), 2)
 		x += 46.0
 	if glad_any:
 		var say := _label("좋아할 거예요", 11, Vector2(236, 284))
@@ -296,10 +296,10 @@ func _show_known(region: Dictionary) -> void:
 		if not (id in Game.seen):
 			unmet = true
 			continue
-		Faces.place(_panel, Faces.of(_species.get(id, {})), Vector2(x, 244), 1)
+		Faces.place(_panel, Faces.of(_species.get(id, {}), _schema), Vector2(x, 244), 1)
 		x += 22.0
 	if unmet:
-		Faces.place(_panel, Faces.unknown(Faces.of(_species.get("squirrel", {}))),
+		Faces.place(_panel, Faces.unknown(Faces.of(_species.get("squirrel", {}), _schema)),
 			Vector2(x + 6, 244), 1)
 	if x > 396.0 or unmet:
 		var say := _label("여기서 만난 아이", 11, Vector2(396, 278))

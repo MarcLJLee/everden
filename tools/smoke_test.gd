@@ -7,7 +7,7 @@
 extends SceneTree
 
 ## 이 아래로 떨어지면 어딘가에서 판정이 조용히 끊긴 것이다.
-const FLOOR := 338
+const FLOOR := 352
 
 var _pass := 0
 var _fail := 0
@@ -1419,6 +1419,21 @@ func _test_weather(field, game) -> void:
 	card.show_for({"species_id": "water_deer", "sex": "male", "stage": "adult", "age_years": 3},
 		deer, true, field.schema)
 	_check("카드가 열린다", card.is_open())
+	# ⚠️ 캔버스 크기를 못 박으면 **옆 프레임이 딸려 온다** — 24폭으로 그려진 청설모가
+	#    32로 잘려 몸이 두 번 나왔다 (사용자 지적).
+	for one_id in ["squirrel", "water_deer", "sparrow"]:
+		var config: Dictionary = DataLoader.load_all(true).species.get(one_id, {})
+		card.show_for({"species_id": one_id, "sex": "male", "stage": "adult", "age_years": 2},
+			config, false, field.schema)
+		# ⚠️ 카드에는 뱃지·아이콘·키캡도 있다. **몸만** 재야 한다 —
+		#    아무 스프라이트나 재면 39px 짜리 키캡을 몸으로 착각한다.
+		var body_node := card.get_node("Art").get_node_or_null("Body")
+		var body_width: int = body_node.texture.get_width() if body_node != null else 0
+		var canvas := SpriteLibrary.canvas_of(config, field.schema)
+		_check("%s 의 몸이 한 마리만 나온다" % one_id, body_width <= canvas.x,
+			"그림 %dpx · 캔버스 %dpx" % [body_width, canvas.x])
+	card.show_for({"species_id": "water_deer", "sex": "male", "stage": "adult", "age_years": 3},
+		deer, true, field.schema)
 	var words: Array = []
 	for node in card.get_node("Text").get_children():
 		words.append(String(node.text))
@@ -1560,6 +1575,72 @@ func _test_weather(field, game) -> void:
 		_check("물에 사는 개체도 언젠가는 다가갈 수 있다 — 갇히지 않는다",
 			touched.size() == swimmers.size(),
 			"%d / %d 마리" % [touched.size(), swimmers.size()])
+
+	# ★ 화면에 **늘 보이는 것은 지명과 자리 둘뿐**이다 (BRIEF §3.4).
+	var hud: CanvasLayer = field.get_node("FieldHud")
+	var always: Array = []
+	for node in hud.get_children():
+		if node is Label:
+			always.append(String(node.text))
+	_check("늘 보이는 줄은 둘뿐이다", always.size() == 2, "%s" % [always])
+	_check("지명이 보인다", "냇가" in always or "뒷산" in always, "%s" % [always])
+	var seat_line := ""
+	for line in always:
+		if line.begins_with("자리"):
+			seat_line = line
+	_check("자리가 보인다", not seat_line.is_empty(), "%s" % [always])
+	# ⚠️ 배고픔·청결·기분 게이지를 두지 않는다 — 늘 보이는 것이 늘면 화면이 할 일 목록이 된다
+	for banned in ["배고", "청결", "기분", "체력"]:
+		_check("HUD 에 '%s' 가 없다" % banned, not (banned in " ".join(always)))
+
+	# ★ 개발용 숫자는 **평소에 꺼져 있다** (F3). 다른 화면 위로 겹치면 안 된다.
+	_check("디버그 오버레이는 평소에 꺼져 있다",
+		not field.get_node("DebugOverlay").visible)
+
+	# ★ **갇히면 안 된다.** 스폰 자리가 물이나 바위면 어느 쪽으로도 못 움직였다 (사용자 지적).
+	#   들어가는 것만 막을 일이지 **나가는 것까지 막을 이유가 없다** (원칙 2).
+	_check("플레이어가 설 수 있는 자리에 선다",
+		field.terrain.can_stand(field.player.position, field.schema, []))
+	var homeless := []
+	for animal in field.sim.animals:
+		if not field.terrain.can_stand(animal.position, field.schema,
+				animal.species.get("habitat", [])):
+			homeless.append(animal.display_name())
+	_check("동물도 살 수 있는 자리에 놓인다", homeless.is_empty(), "%s" % [homeless])
+
+	# 억지로 막힌 자리에 세워도 나올 수 있어야 한다
+	var trapped := []
+	for spot in ["물가", "바위"]:
+		var at := Vector2.ZERO
+		for y in field.tuning.map_size.y:
+			for x in field.tuning.map_size.x:
+				if field.terrain.at_tile(Vector2i(x, y)) == spot:
+					at = Vector2(x + 0.5, y + 0.5) * field.tuning.tile_size
+					break
+			if at != Vector2.ZERO:
+				break
+		if at == Vector2.ZERO:
+			continue
+		var out: Vector2 = field.terrain.slide(at,
+			at + Vector2(field.tuning.tile_size, 0), field.schema, [])
+		if out == at:
+			trapped.append(spot)
+	_check("막힌 자리에 서 있어도 나갈 수 있다", trapped.is_empty(), "%s" % [trapped])
+	# 그래도 **들어가는 것은 막힌다** — 나가는 길을 연다고 통행 규칙이 풀리면 안 된다
+	var bank := Vector2.ZERO
+	for y in field.tuning.map_size.y:
+		for x in field.tuning.map_size.x:
+			if field.terrain.at_tile(Vector2i(x, y)) == "물가" \
+					and field.terrain.at_tile(Vector2i(x - 1, y)) == "초원":
+				bank = Vector2(x - 0.5, y + 0.5) * field.tuning.tile_size
+				break
+		if bank != Vector2.ZERO:
+			break
+	if bank != Vector2.ZERO:
+		var pushed: Vector2 = field.terrain.slide(bank,
+			bank + Vector2(field.tuning.tile_size, 0), field.schema, [])
+		_check("뭍에서 물로는 여전히 못 들어간다",
+			field.terrain.can_stand(pushed, field.schema, []))
 
 	# ★ 실제 날씨는 튀지 않는다 — 지금과 가까운 상태로만 옮겨간다 (사용자 지적)
 	var walker := WeatherSystem.new()

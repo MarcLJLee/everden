@@ -20,6 +20,7 @@ var _open := false
 var _leaving := false
 ## 무엇을 데리고 가는지 물어볼 때 필드가 알려준다.
 var faces_provider := Callable()
+var schema_provider := Callable()
 
 
 func _ready() -> void:
@@ -27,7 +28,7 @@ func _ready() -> void:
 
 
 ## faces 는 데려온 동료와 오늘 초대한 아이의 종 정의 목록이다.
-func open(faces: Array) -> void:
+func open(faces: Array, schema: TagSchema = null) -> void:
 	for node in _art.get_children() + _text.get_children():
 		node.get_parent().remove_child(node)
 		node.queue_free()
@@ -38,22 +39,22 @@ func open(faces: Array) -> void:
 	house.centered = false
 	house.scale = Vector2.ONE * 2
 	if house.texture != null:
-		house.position = Vector2(304, 96)
+		house.position = Vector2(304, 68)
 		_art.add_child(house)
 
-	var ask := _label("집에 갈까요?", 22, Vector2(0, 140))
+	var ask := _label("집에 갈까요?", 22, Vector2(0, 112))
 	ask.size.x = 640
 	ask.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	# 같이 가는 아이 — 얼굴 줄. 숫자로 적지 않는다.
-	var x := 320.0 - faces.size() * 16.0
+	var x := 320.0 - faces.size() * 18.0
 	for species in faces:
-		Faces.place(_art, Faces.of(species), Vector2(x, 184), 2)
-		x += 32.0
+		Faces.place(_art, Faces.of(species, schema), Vector2(x, 162), 2)
+		x += 36.0
 
 	_leaving = false
 	_draw_choice()
-	Keycap.place(_art, "메뉴", Vector2(300, 296))
+	Keycap.place(_art, "메뉴", Vector2(300, 268))
 	_open = true
 	visible = true
 
@@ -63,12 +64,12 @@ func _draw_choice() -> void:
 		if node.has_meta("choice"):
 			node.get_parent().remove_child(node)
 			node.queue_free()
-	var yes := _label("갈래요", 11, Vector2(0, 244))
+	var yes := _label("갈래요", 11, Vector2(0, 228))
 	yes.size.x = 300
 	yes.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	yes.modulate = Color(1.0, 0.92, 0.55) if _leaving else Color(1, 1, 1, 0.5)
 	yes.set_meta("choice", true)
-	var no := _label("더 놀래요", 11, Vector2(340, 244))
+	var no := _label("더 놀래요", 11, Vector2(340, 228))
 	no.size.x = 300
 	no.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	no.modulate = Color(1, 1, 1, 0.5) if _leaving else Color(1.0, 0.92, 0.55)
@@ -93,7 +94,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if _open:
 			close()
 		elif faces_provider.is_valid():
-			open(faces_provider.call())
+			open(faces_provider.call(), schema_provider.call() if schema_provider.is_valid() else null)
 		get_viewport().set_input_as_handled()
 		return
 	if not _open:

@@ -124,6 +124,12 @@ func can_stand(position: Vector2, schema: TagSchema, habitat: Array) -> bool:
 func slide(from: Vector2, to: Vector2, schema: TagSchema, habitat: Array = []) -> Vector2:
 	if can_stand(to, schema, habitat):
 		return to
+	# ★ **못 서는 자리에 있으면 나가는 것은 언제나 된다.** (원칙 2)
+	#   스폰 자리가 물이나 바위면 어느 쪽으로도 못 움직여 그대로 갇혔다 (사용자 지적).
+	#   들어가는 것만 막으면 될 일이지, **나가는 것까지 막을 이유가 없다.**
+	#   이 한 줄이 "어쩌다 갇혔는가" 를 전부 덮는다 — 스폰이든 지형이 바뀌었든.
+	if not can_stand(from, schema, habitat):
+		return to
 	var along_x := Vector2(to.x, from.y)
 	if can_stand(along_x, schema, habitat):
 		return along_x
@@ -135,6 +141,24 @@ func slide(from: Vector2, to: Vector2, schema: TagSchema, habitat: Array = []) -
 
 func at_world(position: Vector2) -> String:
 	return at_tile(Vector2i(floori(position.x / tile_size), floori(position.y / tile_size)))
+
+
+## 여기서 가장 가까운, 설 수 있는 자리. 스폰 자리가 막혔을 때 쓴다.
+## ⚠️ 못 찾으면 원래 자리를 돌려준다 — 그래도 `slide` 가 나가는 길을 열어 둔다.
+func nearest_standing(around: Vector2, schema: TagSchema, habitat: Array = []) -> Vector2:
+	if can_stand(around, schema, habitat):
+		return around
+	for ring in range(1, maxi(size.x, size.y)):
+		for step in ring * 8:
+			var way := Vector2.RIGHT.rotated(TAU * float(step) / float(ring * 8))
+			var probe := around + way * float(ring) * float(tile_size)
+			if probe.x < 0.0 or probe.y < 0.0:
+				continue
+			if probe.x >= float(size.x * tile_size) or probe.y >= float(size.y * tile_size):
+				continue
+			if can_stand(probe, schema, habitat):
+				return probe
+	return around
 
 
 ## 이 종이 살 만한 지형 위의 점 하나. 못 찾으면 빈 벡터를 돌려준다.

@@ -28,7 +28,7 @@ func refresh(state: Dictionary) -> void:
 	var lines := PackedStringArray()
 	lines.append("첫 유도까지: %s" % metrics.first_guide_text())
 	lines.append("초대 성공: %d마리" % metrics.invited_count)
-	lines.append("날씨: %s   [Y] 전환   ·   %s" % [state["weather"], state["weather_shows"]])
+	lines.append("날씨: %s   [Y] 다음   ·   %s" % [state["weather"], state["weather_summary"]])
 	lines.append("시간대: %s   [T] 전환   ·   발밑: %s   ·   승격 %.0f타일" % [
 		state["daypart"], state["terrain"], state["promotion_tiles"]])
 	lines.append("감각 반경: %s" % state["senses"])

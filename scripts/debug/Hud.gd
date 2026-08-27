@@ -23,7 +23,7 @@ func _draw() -> void:
 		_draw_partial(partial)
 	if gauge.active:
 		_draw_gauge(gauge)
-	_draw_weather(String(_state.get("weather", "맑음")))
+	_draw_weather(_state.get("weather_axes", {}))
 
 
 ## 보이던 동물이 사라지는(또는 나타나는) 순간에 먼지를 남긴다.
@@ -113,23 +113,23 @@ func _draw_partial(partial: Dictionary) -> void:
 		Color(0.86, 0.76, 0.44, 0.85))
 
 
-## 날씨는 눈에 보여야 한다. 감각 배율만 바꾸고 화면이 그대로면 규칙이 숨는다.
-## 도트 그림이 들어오면 이펙트 레이어로 옮긴다 — 지금은 도형으로 자리만 잡는다.
-func _draw_weather(weather: String) -> void:
-	match weather:
-		"비":
-			draw_rect(Rect2(Vector2.ZERO, size), Color(0.10, 0.13, 0.20, 0.22))
-			var time := float(Time.get_ticks_msec()) * 0.001
-			for i in 90:
-				var x := fposmod(i * 97.0 + time * 260.0, size.x + 40.0) - 20.0
-				var y := fposmod(i * 53.0 + time * 620.0, size.y + 40.0) - 20.0
-				draw_line(Vector2(x, y), Vector2(x - 4, y + 14), Color(0.72, 0.80, 0.92, 0.5), 1.0)
-		"안개":
-			draw_rect(Rect2(Vector2.ZERO, size), Color(0.85, 0.88, 0.92, 0.30))
-			var drift := fposmod(float(Time.get_ticks_msec()) * 0.00004, 1.0)
-			for band in 4:
-				var y := size.y * (0.25 + band * 0.18 + drift * 0.1)
-				draw_rect(Rect2(0, y, size.x, 18.0), Color(0.92, 0.94, 0.97, 0.10))
+## 날씨는 눈에 보여야 한다. 축 값이 곧 세기다 — 가랑비와 폭우가 같아 보이면 안 된다.
+## 도트 타일(weather/*.png)로 옮기는 것이 다음 단계고, 지금은 세기만 도형으로 낸다.
+func _draw_weather(axes: Dictionary) -> void:
+	var rain := float(axes.get("rain", 0.0))
+	var fog := float(axes.get("fog", 0.0))
+	var wind := float(axes.get("wind", 0.3))
+	var time := float(Time.get_ticks_msec()) * 0.001
+	if fog > 0.01:
+		draw_rect(Rect2(Vector2.ZERO, size), Color(0.85, 0.88, 0.92, fog * 0.55))
+	if rain > 0.01:
+		var drops := int(rain * 150.0)
+		var slant := 3.0 + wind * 9.0
+		for i in drops:
+			var x := fposmod(i * 97.0 + time * (200.0 + wind * 220.0), size.x + 40.0) - 20.0
+			var y := fposmod(i * 53.0 + time * (520.0 + rain * 380.0), size.y + 40.0) - 20.0
+			draw_line(Vector2(x, y), Vector2(x - slant, y + 12.0 + rain * 8.0),
+				Color(0.72, 0.80, 0.92, 0.25 + rain * 0.35), 1.0)
 
 
 func _to_screen(world_position: Vector2) -> Vector2:

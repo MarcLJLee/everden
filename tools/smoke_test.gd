@@ -662,52 +662,114 @@ func _test_terrain_walk(field) -> void:
 	await process_frame
 
 
-## ★ 날씨 — 감각에 걸리는 세 번째 축 (사용자 요청)
+## ★ 날씨는 이름이 아니라 축이다 (BRIEF §6.8)
 func _test_weather(field) -> void:
 	var schema: TagSchema = field.schema
-	var dog: Actor = _find_companion(field, "dog")     # 후각
-	var cat: Actor = _find_companion(field, "cat")     # 청각 · 시야
+	var dog: Actor = _find_companion(field, "dog")
+	var cat: Actor = _find_companion(field, "cat")
+	var weather: WeatherSystem = field.weather
 	field._apply_daypart("낮")
 
-	field._apply_weather("맑음")
-	var nose_clear: float = field.guide.reach_tiles(dog, "후각")
-	var eye_clear: float = field.guide.reach_tiles(cat, "시야")
+	_check("축 다섯 개를 들고 있다", weather.axes.size() == 5
+		and weather.axes.has("cloud") and weather.axes.has("wind"))
 
-	field._apply_weather("비")
-	var nose_rain: float = field.guide.reach_tiles(dog, "후각")
-	var eye_rain: float = field.guide.reach_tiles(cat, "시야")
-	_check("비가 오면 냄새가 씻긴다", nose_rain < nose_clear * 0.6,
-		"%.1f → %.1f타일" % [nose_clear, nose_rain])
+	# 이름이 아니라 축에 걸린다 — 옅은 안개는 시야가 조금만 깎인다
+	var light := schema.sense_weather_scale("시야", {"fog": 0.2})
+	var heavy := schema.sense_weather_scale("시야", {"fog": 0.52})
+	_check("옅은 안개는 시야가 조금만 깎인다", light > heavy and light < 1.0,
+		"옅음 ×%.2f · 짙음 ×%.2f" % [light, heavy])
+	_check("비는 후각을 씻는다", schema.sense_weather_scale("후각", {"rain": 1.0}) < 0.6)
+	_check("바람은 청각을 흩는다", schema.sense_weather_scale("청각", {"wind": 1.0}) < 0.7)
+	_check("안개는 후각을 건드리지 않는다",
+		is_equal_approx(schema.sense_weather_scale("후각", {"fog": 0.52}), 1.0))
 
-	field._apply_weather("안개")
-	var nose_fog: float = field.guide.reach_tiles(dog, "후각")
-	var eye_fog: float = field.guide.reach_tiles(cat, "시야")
-	_check("안개는 시야를 먹는다", eye_fog < eye_clear * 0.5,
-		"%.1f → %.1f타일" % [eye_clear, eye_fog])
-	_check("안개는 냄새를 건드리지 않는다", is_equal_approx(nose_fog, nose_clear))
+	# ★ 강도에 상한이 있다 — 화면이 안 보이면 7살은 그냥 못 논다
+	for i in 40:
+		weather._pick_target()
+		_check_once("안개가 상한을 넘지 않는다", float(weather.target["fog"]) <= 0.521)
+		_check_once("구름이 상한을 넘지 않는다", float(weather.target["cloud"]) <= 0.461)
 
-	# ★ 여기서 나오는 것: 날씨가 '누굴 데려갈까'를 흔든다.
-	#   비가 개의 코를 뒤집지는 못한다 — 후각이 워낙 멀어서다. 대신 격차를 좁힌다.
-	var ear_clear: float = field.guide.reach_tiles(cat, "청각")
-	field._apply_weather("비")
-	var ear_rain: float = field.guide.reach_tiles(cat, "청각")
-	_check("비는 개의 우위를 좁힌다",
-		nose_rain / maxf(ear_rain, 0.01) < nose_clear / maxf(ear_clear, 0.01) * 0.8,
-		"맑음 %.2f배 → 비 %.2f배" % [nose_clear / ear_clear, nose_rain / ear_rain])
-	field._apply_weather("안개")
-	_check("안개 낀 날엔 개가 고양이보다 멀리 본다", nose_fog > eye_fog,
-		"후각 %.1f vs 시야 %.1f" % [nose_fog, eye_fog])
+	# ★ 자연스럽게 흘러간다 — 툭 바뀌지 않는다
+	weather.axes["rain"] = 0.0
+	weather.target["rain"] = 1.0
+	weather.update(0.1, 20.0)
+	var after_tick := float(weather.axes["rain"])
+	_check("한 틱에 목표까지 뛰지 않는다", after_tick > 0.0 and after_tick < 0.05,
+		"%.3f" % after_tick)
+	for i in 400:
+		weather.update(0.1, 20.0)
+	_check("시간이 지나면 목표에 닿는다", float(weather.axes["rain"]) > 0.5
+		or float(weather.target["rain"]) < 1.0)
 
-	# 보이지 않는 규칙을 만들지 않는다
-	var invisible := PackedStringArray()
-	for kind in schema.weather_kinds():
-		if schema.weather_shows(String(kind)).is_empty():
-			invisible.append(String(kind))
-	_check("모든 날씨가 화면에서 무엇으로 보이는지 적혀 있다", invisible.is_empty(),
-		", ".join(invisible))
+	# ★ 지형이 어느 축을 세우는지 정한다
+	var wet := WeatherSystem.new()
+	wet.setup(schema, RandomNumberGenerator.new(), {"물가": 900})
+	var dry := WeatherSystem.new()
+	dry.setup(schema, RandomNumberGenerator.new(), {"바위": 900})
+	_check("물가가 넓으면 안개가 잘 선다",
+		float(wet.weights["fog"]) > float(dry.weights["fog"]),
+		"물가 %.2f vs 바위 %.2f" % [wet.weights["fog"], dry.weights["fog"]])
+	_check("바위가 많으면 바람이 세다",
+		float(dry.weights["wind"]) > float(wet.weights["wind"]),
+		"바위 %.2f vs 물가 %.2f" % [dry.weights["wind"], wet.weights["wind"]])
 
-	field._apply_weather("맑음")
+	# 틴트를 표로 적지 않는다 — 강도가 저절로 따라온다
+	weather.axes = {"cloud": 0.15, "fog": 0.0, "rain": 0.1, "snow": 0.0, "wind": 0.3}
+	var drizzle := weather.tint()
+	weather.axes = {"cloud": 0.46, "fog": 0.1, "rain": 1.0, "snow": 0.0, "wind": 0.66}
+	var downpour := weather.tint()
+	_check("가랑비와 폭우가 같은 색일 수 없다", downpour.r < drizzle.r - 0.05,
+		"%.2f vs %.2f" % [drizzle.r, downpour.r])
+
+	# ★ 지형이 실제로 뽑히는 날씨를 바꾼다 (사용자 요청)
+	# 지형을 섞으면 신호가 묽어지고 표본이 흔들린다. 순수 지형으로 크게 벌려서 본다.
+	var wet_fog := _fog_share(schema, {"물가": 1000})
+	var dry_fog := _fog_share(schema, {"바위": 1000})
+	_check("물가 필드가 바위 필드보다 안개가 잦다", wet_fog > dry_fog * 1.4,
+		"물가 %.0f%% vs 바위 %.0f%%" % [wet_fog * 100.0, dry_fog * 100.0])
+
+	# ★ 한 날씨에 갇히지 않는다.
+	#   처음엔 축 합이 큰 프리셋이 이기게 짰다가 **늘 폭우만 나왔다** —
+	#   축 합은 "얼마나 사나운가"이지 "얼마나 잦은가"가 아니다.
+	var roamer := WeatherSystem.new()
+	roamer.setup(schema, RandomNumberGenerator.new(), {"초원": 2000, "숲": 500})
+	var names := {}
+	for i in 60:
+		roamer._pick_target()
+		names[roamer.nickname_of(roamer.target)] = true
+	_check("한 날씨에 갇히지 않는다", names.size() >= 4, str(names.keys()))
+	_check("사나운 날씨가 기본값이 되지 않는다", not ("폭우" in names) or names.size() >= 5,
+		str(names.keys()))
+
+	# 어떤 지형도 축을 0 으로 막지 않는다 — 기다림을 강요하게 된다
+	var blocked := PackedStringArray()
+	for terrain_name in schema.weather_bias:
+		for axis in schema.weather_bias[terrain_name]:
+			if is_zero_approx(float(schema.weather_bias[terrain_name][axis])):
+				blocked.append("%s.%s" % [terrain_name, axis])
+	_check("어느 지형도 날씨 축을 아주 막지 않는다", blocked.is_empty(), ", ".join(blocked))
 	await process_frame
+
+
+## 그 지형 구성에서 안개 계열이 뽑히는 비율
+func _fog_share(schema: TagSchema, mix: Dictionary) -> float:
+	var weather := WeatherSystem.new()
+	weather.setup(schema, RandomNumberGenerator.new(), mix)
+	var foggy := 0
+	for i in 800:
+		weather._pick_target()
+		if float(weather.target.get("fog", 0.0)) >= 0.2:
+			foggy += 1
+	return float(foggy) / 800.0
+
+
+var _once := {}
+func _check_once(label: String, condition: bool) -> void:
+	if _once.has(label):
+		_once[label] = _once[label] and condition
+		return
+	_once[label] = condition
+	_check(label, condition)
 
 
 ## ★ 시간대는 감각 반경만이 아니라 **누가 나와 있는가**를 바꾼다 (사용자 요청)

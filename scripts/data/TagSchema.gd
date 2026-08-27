@@ -11,7 +11,7 @@ var trait_to_sense: Dictionary = {}     ## trait -> {sense, clue}
 var sense_profile: Dictionary = {}
 var eyeshine: Dictionary = {}
 var terrain_walkable: Dictionary = {}   ## 지형 -> 플레이어가 밟을 수 있는가
-var weather: Dictionary = {}            ## 날씨 -> {sense_scale, shows}
+var weather_bias: Dictionary = {}       ## 지형 -> {축: 가중치}
 var activity_presence: Dictionary = {}  ## activity -> {시간대: 나와 있을 확률}
 var quirks: Dictionary = {}             ## 개성 이름 -> {move_scale, gauge_scale, flee_tiles, shows}           ## activity -> 눈이 빛나 보이는 시간대 목록      ## sense -> {reveals, range_scale, daypart_scale, terrain_scale}
 var emote_icons: Dictionary = {}
@@ -29,7 +29,7 @@ static func from_dict(raw: Dictionary) -> TagSchema:
 	s.sense_profile = _strip_comments(raw.get("sense_profile", {}))
 	s.eyeshine = _strip_comments(raw.get("eyeshine", {})).get("by_activity", {})
 	s.terrain_walkable = _strip_comments(raw.get("terrain_walkable", {}))
-	s.weather = _strip_comments(raw.get("weather", {}))
+	s.weather_bias = _strip_comments(raw.get("weather_bias", {}))
 	s.activity_presence = _strip_comments(raw.get("activity_presence", {}))
 	s.quirks = _strip_comments(raw.get("quirks", {}))
 	s.emote_icons = _strip_comments(raw.get("emote_icons", {}))
@@ -97,19 +97,20 @@ func eyeshines_at(activity: String, daypart: String) -> bool:
 func walkable(terrain: String) -> bool:
 	return bool(terrain_walkable.get(terrain, true))
 
-## 날씨가 이 감각에 곱하는 배율. 시간대·지형과 같은 자리에 붙는 세 번째 축이다.
-func sense_weather_scale(sense: String, weather_name: String) -> float:
-	var table: Dictionary = weather.get(weather_name, {}).get("sense_scale", {})
-	return float(table.get(sense, 1.0))
+## 날씨가 이 감각에 곱하는 배율. **이름이 아니라 축에 건다** (BRIEF §6.8) —
+## 그래야 "옅은 안개는 시야가 조금만 깎인다"가 된다.
+## 축이 0 이면 1.0, 1 이면 표에 적힌 값, 사이는 그 사이다.
+func sense_weather_scale(sense: String, axes: Dictionary) -> float:
+	var table: Dictionary = _profile(sense).get("weather_axis_scale", {})
+	var value := 1.0
+	for axis in table:
+		value *= lerpf(1.0, float(table[axis]), clampf(float(axes.get(axis, 0.0)), 0.0, 1.0))
+	return value
 
 
-## 이 날씨가 화면에서 무엇으로 보이는가. 보이지 않는 규칙을 만들지 않는다.
-func weather_shows(weather_name: String) -> String:
-	return String(weather.get(weather_name, {}).get("shows", ""))
-
-
-func weather_kinds() -> Array:
-	return weather.keys()
+## 이 지형에서 그 축이 얼마나 잘 서는가. 적히지 않은 지형은 1.0.
+func weather_weight(terrain: String, axis: String) -> float:
+	return float(weather_bias.get(terrain, {}).get(axis, 1.0))
 
 
 ## 이 종이 그 시간대에 나와 있을 확률.

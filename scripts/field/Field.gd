@@ -29,8 +29,9 @@ var terrain := TerrainMap.new()
 var player: Actor = null
 var companions: Array[Actor] = []
 var daypart := "낮"
-## 날씨는 감각에 걸리는 세 번째 축이다. 비는 후각을 씻고 안개는 시야를 먹는다.
-var weather := "맑음"
+## 날씨는 이름이 아니라 축이다. 지형이 어느 축을 잘 세우는지 정하고,
+## 축은 목표를 향해 천천히 흘러간다. (BRIEF §6.8)
+var weather := WeatherSystem.new()
 
 var _rng := RandomNumberGenerator.new()
 var _bounds := Rect2()
@@ -96,8 +97,9 @@ func _ready() -> void:
 	_palette_from = _palette_of(daypart)
 	_palette_to = _palette_from
 	_palette_t = 1.0
+	weather.setup(schema, _rng, _terrain_mix())
+	guide.set_weather_axes(weather.axes)
 	_apply_daypart(daypart)
-	_apply_weather(weather)
 	_advance_palette(0.0)
 
 
@@ -117,6 +119,8 @@ func _process(delta: float) -> void:
 	_clues = _apply_reveal()
 	_sync_clue_markers(_clues)
 	_age_puffs(delta)
+	weather.update(delta, tuning.weather_drift_seconds)
+	guide.set_weather_axes(weather.axes)
 	_advance_palette(delta)
 	_apply_eyeshine()
 	_update_interaction(delta)
@@ -390,8 +394,7 @@ func _handle_debug_input() -> void:
 	if Input.is_action_just_pressed("debug_toggle_companion_2"):
 		_toggle_companion(1)
 	if Input.is_action_just_pressed("debug_cycle_weather"):
-		var kinds := schema.weather_kinds()
-		_apply_weather(String(kinds[(kinds.find(weather) + 1) % kinds.size()]))
+		weather._pick_target()   # 다음 날씨로 넘어가는 것을 눈으로 보려고 두는 치트
 	if Input.is_action_just_pressed("debug_cycle_daypart"):
 		_apply_daypart(DAYPARTS[(DAYPARTS.find(daypart) + 1) % DAYPARTS.size()])
 	if Input.is_action_just_pressed("debug_reset_run"):
@@ -420,9 +423,14 @@ func _apply_daypart(next: String) -> void:
 	guide.set_daypart(daypart)
 
 
-func _apply_weather(next: String) -> void:
-	weather = next
-	guide.set_weather(weather)
+## 지형 구성 — 어느 지형이 몇 타일인가. 날씨가 이걸 보고 어느 축을 세울지 정한다.
+func _terrain_mix() -> Dictionary:
+	var mix := {}
+	for y in tuning.map_size.y:
+		for x in tuning.map_size.x:
+			var name := terrain.at_tile(Vector2i(x, y))
+			mix[name] = int(mix.get(name, 0)) + 1
+	return mix
 
 
 func _palette_of(name: String) -> String:
@@ -444,7 +452,8 @@ func _advance_palette(delta: float) -> void:
 	if DayPalette.set_blend(_palette_from, _palette_to, _palette_t):
 		_ground.refresh_textures()
 		PropScatter.refresh_textures(_props)
-	_modulate.color = DayPalette.tint()
+	# 시간대 틴트 × 날씨 틴트. 팔레트는 시간대만 건드린다 — 곱셈이 아니라 덧셈이 되는 자리다.
+	_modulate.color = DayPalette.tint() * weather.tint()
 
 
 ## 첫 유도까지 걸린 시간을 다시 재려면 필드를 다시 깔아야 한다.
@@ -471,8 +480,9 @@ func _build_state() -> Dictionary:
 		"gauge": gauge,
 		"hit": _current_hit,
 		"daypart": daypart,
-		"weather": weather,
-		"weather_shows": schema.weather_shows(weather),
+		"weather": weather.nickname(),
+		"weather_axes": weather.axes,
+		"weather_summary": weather.summary(),
 		"present_count": sim.count_present(),
 		"total_count": sim.animals.size(),
 		"active_count": sim.count_active(),

@@ -137,7 +137,9 @@ func _process(delta: float) -> void:
 	_follow_player(delta)
 
 	sim.update(delta, player.position)
-	_current_hit = guide.update(_active_companions(), sim.active_animals())
+	# 유도는 **놓인 개체 전부**를 본다. 노드가 붙었는지는 상관없다 —
+	# 코는 저 너머의 냄새도 맡는다.
+	_current_hit = guide.update(_active_companions(), sim.present_animals())
 	if _current_hit != null:
 		metrics.note_guide()
 
@@ -294,15 +296,19 @@ func _toggle_companion(index: int) -> void:
 
 # --- 무엇이 보이는가 ---------------------------------------------------------
 
-## 멀리 있는 동물은 그냥 보이지 않는다. 보이게 만드는 것은 둘 중 하나다 —
-## 가까이 가거나, 몸을 드러내는 감각(tags.json 의 sense_reveals)을 가진 동료를 데려가거나.
-## 그 밖의 감각은 방향과 단서까지만 알려준다. (BRIEF §3.3)
+## ★ **보이는 것은 언제나 내 시야 안에 있는 것이다.** (BRIEF §3.14 · 사용자 지적)
+##   동료가 감지했다고 저 멀리 있는 동물을 화면에 그리는 건 세계의 사건이 아니라
+##   **게임이 알려주는 것**이다. 감각은 전부 "거기에 뭔가 있다" 까지만 말한다.
+##   그래서 발견의 순간이 아이에게 남는다 — 동료는 데려다주고, 보는 것은 아이가 한다.
+##
+## ★ 단서는 **놓인 개체 전부**에서 나온다. 노드가 붙은 개체만 보면
+##   승격 반경이 감각 반경 전체를 덮어야 했다 — 이제 보이는 반경만 덮으면 된다.
 func _apply_reveal() -> Array:
 	var reveal_px := tuning.reveal_radius * tuning.tile_size
 	var clues: Array = []
 	for animal in sim.active_animals():
 		var near := player.position.distance_to(animal.position) <= reveal_px
-		animal.actor.visible = near or guide.reveals_body(animal)
+		animal.actor.visible = near
 		# 보이던 게 그냥 없어지면 아이는 무슨 일이 났는지 모른다. 먼지를 남긴다.
 		if animal.actor.visible != animal.was_visible:
 			_puffs.append({
@@ -311,7 +317,11 @@ func _apply_reveal() -> Array:
 				"hiding": animal.was_visible,
 			})
 		animal.was_visible = animal.actor.visible
-		if animal.actor.visible:
+	# 노드가 없는 개체도 단서는 남긴다 — 흔적은 몸이 아니라 자리에 있는 것이다
+	for animal in sim.animals:
+		if animal.invited or not animal.present:
+			continue
+		if animal.is_active() and animal.actor != null and animal.actor.visible:
 			continue
 		var senses := guide.detected_senses(animal)
 		if senses.is_empty():

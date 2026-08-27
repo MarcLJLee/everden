@@ -42,7 +42,11 @@ extends Resource
 @export var guide_radius: float = 10.0
 ## 풀 AI 승격 거리. 가장 멀리 닿는 감각보다 좁으면 코가 헛돌기 때문에,
 ## Field 가 실제 감각 반경을 계산해 이 값이 모자라면 올려 쓰고 경고를 남긴다.
-@export var activation_radius: float = 26.0
+## ★ **보이는 반경만 덮으면 된다** (BRIEF §3.14 · 사용자 지적).
+## 예전엔 감각 반경 전체(26타일)를 덮어야 했다 — 저 멀리서 감지된 몸을 그려야 했기 때문이다.
+## 이제 몸은 내 시야 안에서만 보이고 단서는 노드 없이도 나오므로, 승격은 그 언저리면 된다.
+## reveal_radius(3) 보다 넉넉히 두는 이유는 **화면에 들어오기 전에 이미 걷고 있어야** 하기 때문이다.
+@export var activation_radius: float = 8.0
 @export var interact_radius: float = 1.5
 ## 교감을 이어가려면 이 거리 안에 있어야 한다. **벗어나면 멈출 뿐 줄지 않는다** —
 ## 되돌릴 수 없는 실패를 만들지 않는다(원칙 2). 시작 반경보다 조금 넉넉해야

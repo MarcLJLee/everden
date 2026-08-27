@@ -289,6 +289,16 @@ func count_present() -> int:
 	return total
 
 
+## 지금 이 필드에 나와 있는 개체 전부. 노드가 붙었는지는 안 본다 —
+## 단서와 유도는 **몸이 아니라 자리**에서 나온다.
+func present_animals() -> Array[WildAnimal]:
+	var out: Array[WildAnimal] = []
+	for animal in animals:
+		if animal.present and not animal.invited:
+			out.append(animal)
+	return out
+
+
 func active_animals() -> Array[WildAnimal]:
 	var out: Array[WildAnimal] = []
 	for animal in animals:

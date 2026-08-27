@@ -7,7 +7,7 @@
 extends SceneTree
 
 ## 이 아래로 떨어지면 어딘가에서 판정이 조용히 끊긴 것이다.
-const FLOOR := 280
+const FLOOR := 285
 
 var _pass := 0
 var _fail := 0
@@ -351,9 +351,26 @@ func _test_reveal(field) -> void:
 		not animal.actor.visible and clues.size() == 1 and clues[0]["sense"] == "후각",
 		"보임=%s 단서=%d" % [animal.actor.visible, clues.size()])
 
+	# ★ **몸을 원격으로 드러내는 감각은 없다** (BRIEF §3.14 · 사용자 지적).
+	#   동료가 감지했다고 저 멀리 있는 동물을 화면에 그리면 그건 세계의 사건이 아니라
+	#   게임이 알려주는 것이다. 눈도 "거기에 뭔가 있다" 까지만 말한다.
 	field.guide.update([cat], [animal])
 	clues = field._apply_reveal()
-	_check("시야로 찾으면 멀리서도 몸이 보인다", animal.actor.visible and clues.is_empty())
+	_check("시야로 찾아도 멀리 있는 몸은 안 보인다",
+		not animal.actor.visible, "보임=%s" % animal.actor.visible)
+	_check("대신 그 자리에 자국이 남는다",
+		clues.size() == 1 and String(clues[0]["sense"]) == "시야",
+		"단서 %d개" % clues.size())
+
+	# 범주는 갈린다 — 코와 귀는 **방향**(공중 표시), 눈은 **자리**(땅의 자국)
+	_check("눈의 단서는 자리를 말한다", field.schema.sense_marks_spot("시야"))
+	_check("코의 단서는 방향을 말한다", not field.schema.sense_marks_spot("후각"))
+	_check("귀의 단서도 방향을 말한다", not field.schema.sense_marks_spot("청각"))
+
+	# 가까이 가면 그때 보인다 — 발견의 순간은 아이의 것이다
+	field.player.position = animal.position
+	clues = field._apply_reveal()
+	_check("가까이 가면 보인다", animal.actor.visible)
 
 	# 감각이 하나도 없어도 코앞이면 보인다
 	animal.position = field.player.position + Vector2(8, 0)

@@ -129,14 +129,6 @@ func _record(animal: FieldSim.WildAnimal, senses: PackedStringArray) -> void:
 	detections[animal] = entry
 
 
-## 감지된 감각 중 하나라도 "몸이 보이는" 감각이면 대상이 드러난다. (BRIEF §3.3)
-func reveals_body(animal: FieldSim.WildAnimal) -> bool:
-	for sense in detected_senses(animal):
-		if _schema.sense_reveals_body(String(sense)):
-			return true
-	return false
-
-
 func detected_senses(animal: FieldSim.WildAnimal) -> PackedStringArray:
 	var entry: Dictionary = detections.get(animal, {})
 	return entry.get("senses", PackedStringArray())

@@ -20,6 +20,7 @@ const WEATHER_MARGIN := 1.6
 
 @onready var _weather_layers: WeatherLayers = $Weather
 @onready var _snow: SnowField = $Snow
+@onready var _ambient: AmbientLife = $AmbientAir
 @onready var _camera: Camera2D = $Camera2D
 @onready var _overlay = $DebugOverlay
 @onready var _modulate: CanvasModulate = $CanvasModulate
@@ -111,6 +112,8 @@ func _ready() -> void:
 	_palette_to = _palette_from
 	_palette_t = 1.0
 	weather.setup(schema, _rng, _terrain_mix())
+	# 잡을 수 없는 생명. 지면·수면 생물은 Y-sort 안으로 들어가 캐릭터에 가린다.
+	_ambient.setup(terrain, _rng, _actors, region)
 	_weather_layers.build()
 	# `godot --path . -- --snow` 로 켜면 눈부터 시작한다. 계절이 없는 동안 눈을 보려는 용도다.
 	if "--snow" in OS.get_cmdline_user_args():
@@ -151,6 +154,7 @@ func _process(delta: float) -> void:
 		float(tuning.daypart_sun_height.get(daypart, 1.0)))
 	_snow.update(delta, float(weather.axes.get("snow", 0.0)),
 		float(weather.axes.get("wind", 0.3)), camera_visible_rect())
+	_ambient.update(delta, camera_visible_rect())
 	_advance_palette(delta)
 	_apply_eyeshine()
 	_update_interaction(delta)

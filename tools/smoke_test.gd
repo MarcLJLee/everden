@@ -1073,6 +1073,70 @@ func _test_weather(field) -> void:
 	for key in ["male", "female", "paired", "alone"]:
 		_check("짝 UI 그림이 있다 — %s" % key, SpriteLibrary.pair_ui_texture(key) != null)
 
+	# ★ 앰비언트 생물 — **잡을 수 없는 것들** (BRIEF §3.10).
+	#   보이는 것이 전부 수집 대상이면 숲이 아니라 쇼핑 목록이다.
+	var ambient: AmbientLife = field.get_node("AmbientAir")
+	_check("앰비언트 생물이 있다", ambient._lives.size() > 0, "%d 마리" % ambient._lives.size())
+	var wild_names := {}
+	for animal in field.sim.animals:
+		wild_names[animal.display_name()] = true
+	var off_terrain := []
+	var non_integer := 0
+	var air_outside := true
+	var ground_inside := true
+	var collectible := []
+	for life in ambient._lives:
+		# 수집 대상이 아니다 — 필드 시뮬에 개체로 들어가지 않는다
+		if wild_names.has(life["name"]) and not (life["name"] in collectible):
+			collectible.append(life["name"])
+		# 층 — 공중은 Y-sort 밖, 지면·수면은 캐릭터와 같이 정렬된다
+		var parent: Node = life["sprite"].get_parent()
+		if String(life["layer"]) == "공중":
+			air_outside = air_outside and parent == ambient
+		else:
+			ground_inside = ground_inside and parent == field.get_node("Actors")
+		if not life["alive"]:
+			continue
+		if not (field.terrain.at_world(life["pos"]) in life["terrain"]):
+			off_terrain.append(life["name"])
+		if life["sprite"].position != life["sprite"].position.floor():
+			non_integer += 1
+	_check("앰비언트는 수집 대상이 아니다 — 도감에도 자리에도 없다",
+		collectible.is_empty(), "%s" % [collectible])
+	_check("공중 생물은 Y-sort 밖에 있다 — 캐릭터 위로 지나간다", air_outside)
+	_check("지면·수면 생물은 Y-sort 안에 있다 — 캐릭터에 가린다", ground_inside)
+	_check("지형 태그 하나만 보고 산다", off_terrain.is_empty(), "%s" % [off_terrain])
+	_check("정수 픽셀에 찍힌다", non_integer == 0, "%d 마리가 반픽셀" % non_integer)
+
+	# ★ 얼마나 사는지는 **지역이 정한다** — 수집종 ecology 와 같은 규칙
+	var lonely_region := {"ambient": {"나비": 3.0}}
+	var only_butterfly := AmbientLife.new()
+	field.add_child(only_butterfly)
+	only_butterfly.setup(field.terrain, RandomNumberGenerator.new(), field.get_node("Actors"),
+		lonely_region)
+	var kinds := {}
+	for life in only_butterfly._lives:
+		kinds[life["name"]] = int(kinds.get(life["name"], 0)) + 1
+	_check("지역에 적히지 않은 생물은 그 지역에 없다", kinds.size() == 1, "%s" % [kinds.keys()])
+	_check("지역이 많다고 하면 많다", int(kinds.get("나비", 0)) >= 12,
+		"나비 %d 마리" % int(kinds.get("나비", 0)))
+	only_butterfly.queue_free()
+
+	var empty_region := AmbientLife.new()
+	field.add_child(empty_region)
+	empty_region.setup(field.terrain, RandomNumberGenerator.new(), field.get_node("Actors"), {})
+	_check("지역이 안 적어두면 기본값으로 산다 — 새 지역이 조용히 죽지 않는다",
+		empty_region._lives.size() > 0, "%d 마리" % empty_region._lives.size())
+	empty_region.queue_free()
+	await process_frame
+
+	# 새는 그리지 않고 그림자만 그린다 — 그림자는 반투명이어야 그림자다
+	var shadow_alpha := 1.0
+	for life in ambient._lives:
+		if String(life["name"]) == "새그림자":
+			shadow_alpha = life["sprite"].modulate.a
+	_check("새 그림자는 반투명이다", shadow_alpha < 0.5, "%.2f" % shadow_alpha)
+
 	# ★ 실제 날씨는 튀지 않는다 — 지금과 가까운 상태로만 옮겨간다 (사용자 지적)
 	var walker := WeatherSystem.new()
 	walker.setup(schema, RandomNumberGenerator.new(), {"초원": 2000, "숲": 600})

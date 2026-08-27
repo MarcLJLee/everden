@@ -23,6 +23,28 @@ static func index() -> Dictionary:
 
 
 ## 후각·청각은 지면에 실물이 없다 — 공중에 뜨는 표시다. (HANDOFF §4)
+## 이 종의 암수 이형 파츠. 표에 없으면 빈 사전 — **종 이름으로 분기하지 않는다** (원칙 4).
+## 새 이형 종이 늘어도 코드는 그대로다. (BRIEF §4.9 · palettes.json 의 dimorphism)
+static func dimorphism_for(species_id: String) -> Dictionary:
+	var table: Dictionary = index().get("dimorphism", {}).get("species", {})
+	return table.get(species_id, {})
+
+
+## 이형 파츠 한 장. 경로는 dimorphism 표가 준다.
+static func dimorph_texture(relative: String) -> Texture2D:
+	if relative.is_empty():
+		return null
+	return _texture_from(relative)
+
+
+## 성별 뱃지·짝 표시. 종 수와 무관한 다섯 장이다. (palettes.json 의 pair_ui)
+static func pair_ui_texture(key: String) -> Texture2D:
+	var path := String(index().get("pair_ui", {}).get(key, ""))
+	if path.is_empty():
+		return null
+	return _texture_from(path)
+
+
 static func airborne_clue_texture(sense: String) -> Texture2D:
 	# 냄새·소리 표시는 배경이 아니라 표현이다. 밤이라고 색이 바뀌면 안 읽힌다.
 	return _texture_from(index().get("clue_airborne", {}).get(sense, ""), false)
@@ -195,6 +217,28 @@ const SUBSTITUTES := {
 	"special": "idle",
 }
 
+## 이 동작에 실제로 쓸 파일 이름. 없으면 대역을 찾고, 그것도 없으면 빈 문자열.
+##
+## ★ 대역 사슬에 **고리**가 있다 (move_south → move_side → move_south).
+##   방문한 곳을 기억하지 않으면 없는 파일을 그대로 로드해서 터진다 —
+##   실제로 idle 만 있는 종이 들어왔을 때 그렇게 터졌다.
+static func _substitute_for(species_id: String, anim: String) -> String:
+	var seen := {}
+	var source := anim
+	while not seen.has(source):
+		if ResourceLoader.exists(_strip_path(species_id, source)):
+			return source
+		seen[source] = true
+		source = String(SUBSTITUTES.get(source, ""))
+		if source.is_empty():
+			break
+	# 사슬이 고리를 돌았다. 있는 것 아무거나 쓴다 — idle 이 먼저다.
+	for candidate in ANIMATIONS:
+		if ResourceLoader.exists(_strip_path(species_id, candidate)):
+			return candidate
+	return ""
+
+
 ## 이 종의 그림이 하나라도 있는가
 static func has_art(species_id: String) -> bool:
 	for anim in ANIMATIONS:
@@ -216,12 +260,11 @@ static func body_frames(species: Dictionary, canvas: Vector2i) -> Dictionary:
 		frames.add_animation(anim)
 		frames.set_animation_loop(anim, true)
 		frames.set_animation_speed(anim, 6.0)
-		var source: String = anim
-		while not ResourceLoader.exists(_strip_path(id, source)):
-			var next: String = SUBSTITUTES.get(source, "")
-			if next.is_empty() or next == anim:
-				break
-			source = next
+		var source := _substitute_for(id, anim)
+		if source.is_empty():
+			# 그림이 하나도 없다. 이 종은 통째로 색 사각형으로 간다 —
+			# 한 동작만 사각형이면 걷다가 갑자기 네모가 된다.
+			return {"frames": PlaceholderArt.body_frames(species, canvas), "real": false, "missing": []}
 		if source != anim:
 			missing.append(anim)
 		for texture in _slice(_strip_path(id, source), canvas):
@@ -269,8 +312,12 @@ static func _strip_path(species_id: String, anim: String) -> String:
 
 ## 가로 스트립을 캔버스 폭으로 잘라 프레임 목록을 만든다.
 static func _slice(path: String, canvas: Vector2i) -> Array[Texture2D]:
-	var sheet: Texture2D = load(path)
 	var out: Array[Texture2D] = []
+	if not ResourceLoader.exists(path):
+		return out
+	var sheet: Texture2D = load(path)
+	if sheet == null:
+		return out
 	var count := int(sheet.get_width() / float(canvas.x))
 	for i in maxi(count, 1):
 		var atlas := AtlasTexture.new()

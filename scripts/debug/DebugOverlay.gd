@@ -28,10 +28,24 @@ func refresh(state: Dictionary) -> void:
 	var lines := PackedStringArray()
 	lines.append("첫 유도까지: %s" % metrics.first_guide_text())
 	lines.append("초대 성공: %d마리" % metrics.invited_count)
+	lines.append("날씨: %s   [Y] 다음 · [U] 눈   ·   %s"
+		% [state["weather"], state["weather_summary"]])
 	lines.append("시간대: %s   [T] 전환   ·   발밑: %s   ·   승격 %.0f타일" % [
 		state["daypart"], state["terrain"], state["promotion_tiles"]])
 	lines.append("감각 반경: %s" % state["senses"])
-	lines.append("동물: 보임 %d / 단서만 %d / 활성 %d / 얕은시뮬 %d" % [
+	var roster: PackedStringArray = []
+	var mix: Dictionary = state.get("sex_mix", {})
+	for name in state["roster"]:
+		# 성별은 개체 정의 때 정해진다 (§3.11 1단계). 필드에서는 고라니만 도트로 보이므로
+		# 나머지는 여기에 적어 둔다 — 보이지 않는 데이터 필드를 만들지 않는다 (원칙 5).
+		var kinds: Dictionary = mix.get(name, {})
+		var tail := ""
+		if not kinds.is_empty():
+			tail = "(♂%d♀%d)" % [int(kinds.get("male", 0)), int(kinds.get("female", 0))]
+		roster.append("%s %d%s" % [name, state["roster"][name], tail])
+	lines.append("이번 원정: %s" % (", ".join(roster) if not roster.is_empty() else "(비었다)"))
+	lines.append("동물: 나와있음 %d/%d · 보임 %d · 단서만 %d · 활성 %d · 얕은시뮬 %d" % [
+		state["present_count"], state["total_count"],
 		state["visible_count"], state["clues"].size(),
 		state["active_count"], state["shallow_count"]])
 	lines.append("동료: %s" % state["companions"])
@@ -42,8 +56,9 @@ func refresh(state: Dictionary) -> void:
 	else:
 		lines.append("유도: 없음")
 	if gauge.active:
-		lines.append("게이지: %.1f초 (×%.2f — %s)" % [
-			gauge.duration, gauge.factor, ", ".join(gauge.reasons)])
+		lines.append("게이지: %.1f초 (×%.2f — %s)%s" % [
+			gauge.duration, gauge.factor, ", ".join(gauge.reasons),
+			"   ⏸ 멀어져서 멈춤 (줄지는 않는다)" if gauge.paused else ""])
 	else:
 		lines.append("게이지: 대기 — 대상에 붙어 [스페이스]")
 	_label.text = "\n".join(lines)

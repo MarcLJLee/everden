@@ -44,6 +44,10 @@ extends Resource
 ## Field 가 실제 감각 반경을 계산해 이 값이 모자라면 올려 쓰고 경고를 남긴다.
 @export var activation_radius: float = 26.0
 @export var interact_radius: float = 1.5
+## 교감을 이어가려면 이 거리 안에 있어야 한다. **벗어나면 멈출 뿐 줄지 않는다** —
+## 되돌릴 수 없는 실패를 만들지 않는다(원칙 2). 시작 반경보다 조금 넉넉해야
+## 발을 조금 떼는 것만으로 멈추지 않는다.
+@export var hold_radius: float = 2.6
 
 @export_group("교감 게이지")
 @export var base_gauge_time: float = 3.0
@@ -58,6 +62,14 @@ extends Resource
 ## 시간대를 바꿨을 때 색이 넘어가는 시간(초). 0 이면 툭 튄다.
 @export var daypart_fade: float = 1.2
 ## 어두울 때 눈이 되비추는 색. 빛을 내는 게 아니라 반사라서 노란빛이 돈다.
+## 시간대별 햇빛의 양. 햇살 얼룩이 이 값에 묶인다 — **밤에 햇살이 비치면 안 된다.**
+@export var daypart_daylight: Dictionary = {"낮": 1.0, "여명": 0.4, "밤": 0.0}
+## 시간대별 **해의 높이**. 빛의 양과 다르다 — 여명에도 빛은 있지만 해가 낮게 걸린다.
+## 빛줄기가 이 값에 묶인다: 기둥이 수직에서 27° 라 해가 높이 떠야 나오는 각도다.
+## 해가 낮은 시간에 그대로 쏟으면 각도가 거짓말이 된다.
+@export var daypart_sun_height: Dictionary = {"낮": 1.0, "여명": 0.12, "밤": 0.0}
+## 날씨가 다음 상태까지 옮겨가는 데 걸리는 시간(초). 짧으면 스위치처럼 툭 바뀐다.
+@export var weather_drift_seconds: float = 22.0
 @export var eyeshine_color: Color = Color(0.98, 0.96, 0.55)
 ## 걷기 바운스 높이. 노드 Y로 처리하고 정수 픽셀로 스냅한다. (DEMO-SPEC §3.2)
 @export var bounce_height_px: int = 1

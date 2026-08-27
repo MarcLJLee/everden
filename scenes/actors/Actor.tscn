@@ -16,6 +16,8 @@ script = ExtResource("2_face")
 [node name="BodySprite" type="AnimatedSprite2D" parent="Body"]
 centered = false
 
+[node name="Dimorph" type="Sprite2D" parent="Body"]
+
 [node name="Eye" type="Sprite2D" parent="Body"]
 centered = false
 

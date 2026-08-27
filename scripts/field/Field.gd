@@ -15,6 +15,11 @@ const DAYPARTS := ["낮", "여명", "밤"]
 @onready var _ground: Node2D = $Ground
 @onready var _actors: Node2D = $Actors
 @onready var _markers: Node2D = $Markers
+## 날씨 겹을 화면보다 얼마나 넓게 까는가. 1.0 이면 가장자리가 빈다.
+const WEATHER_MARGIN := 1.6
+
+@onready var _weather_layers: WeatherLayers = $Weather
+@onready var _snow: SnowField = $Snow
 @onready var _camera: Camera2D = $Camera2D
 @onready var _overlay = $DebugOverlay
 @onready var _modulate: CanvasModulate = $CanvasModulate
@@ -29,6 +34,9 @@ var terrain := TerrainMap.new()
 var player: Actor = null
 var companions: Array[Actor] = []
 var daypart := "낮"
+## 날씨는 이름이 아니라 축이다. 지형이 어느 축을 잘 세우는지 정하고,
+## 축은 목표를 향해 천천히 흘러간다. (BRIEF §6.8)
+var weather := WeatherSystem.new()
 
 var _rng := RandomNumberGenerator.new()
 var _bounds := Rect2()
@@ -39,6 +47,9 @@ var _clues: Array = []
 var _puffs: Array = []
 var _promotion_px := 0.0
 var _props: Array = []
+var _last_weather_name := ""
+## 지금 원정 중인 지역. 세계 지도가 생기면 거기서 정해진다 (BRIEF §3.9).
+@export var region_id := "home_hills"
 var _clue_markers: Array = []
 var _palette_from := "day"
 var _palette_to := "day"
@@ -63,11 +74,17 @@ func _ready() -> void:
 
 	var tile := tuning.tile_size
 	_bounds = Rect2(Vector2.ZERO, Vector2(tuning.map_size) * tile)
-	terrain.generate(tuning.map_size, tile, {
-		"숲": tuning.forest_patches,
-		"물가": tuning.water_patches,
-		"바위": tuning.rock_patches,
-	}, _rng)
+	for name in schema.terrain_walkable:
+		if not schema.walkable(String(name)):
+			terrain.blocked_terrains.append(String(name))
+	# ★ 지형은 **지역이 정한다.** 모든 필드에 물가가 조금씩 섞이면
+	#   뒷산에 늘 개울이 있는 셈이 되어 "뒷산에 수달이 산다"가 되어버린다.
+	var region: Dictionary = result.regions.get(region_id, {})
+	var shape: Dictionary = region.get("terrain", {})
+	var patches: Dictionary = shape.get("patches", {
+		"숲": tuning.forest_patches, "물가": tuning.water_patches, "바위": tuning.rock_patches,
+	})
+	terrain.generate(tuning.map_size, tile, patches, _rng, String(shape.get("base", "초원")))
 	_ground.setup(tuning, terrain)
 	_props = PropScatter.scatter(_actors, terrain, tuning, _rng)
 	_camera.zoom = Vector2.ONE * tuning.camera_zoom
@@ -77,18 +94,31 @@ func _ready() -> void:
 	_camera.limit_bottom = int(_bounds.size.y)
 
 	guide.setup(schema, tuning, terrain)
-	gauge.setup(tuning)
+	gauge.setup(tuning, schema)
 
 	_spawn_player()
 	_spawn_companions(result.species)
+	for companion in companions:
+		companion.confine = _terrain_confine(companion)
 	_promotion_px = _promotion_radius_px()
 	sim.setup(_actors, actor_scene, schema, tuning, _rng, _bounds, terrain, _promotion_px)
+	# 이 필드가 어느 지역인가. 지역이 늘면 여기만 갈아끼운다.
+	sim.region = region
 
 	_target_species = _collect_targets(result.species)
 	sim.spawn(_target_species, player.position)
 	_palette_from = _palette_of(daypart)
 	_palette_to = _palette_from
 	_palette_t = 1.0
+	weather.setup(schema, _rng, _terrain_mix())
+	_weather_layers.build()
+	# `godot --path . -- --snow` 로 켜면 눈부터 시작한다. 계절이 없는 동안 눈을 보려는 용도다.
+	if "--snow" in OS.get_cmdline_user_args():
+		var snowy: Dictionary = weather.data.get("presets", {}).get("함박눈", {})
+		if not snowy.is_empty():
+			weather.axes = snowy.duplicate()
+			weather.target = snowy.duplicate()
+	guide.set_weather_axes(weather.axes)
 	_apply_daypart(daypart)
 	_advance_palette(0.0)
 
@@ -109,12 +139,22 @@ func _process(delta: float) -> void:
 	_clues = _apply_reveal()
 	_sync_clue_markers(_clues)
 	_age_puffs(delta)
+	weather.update(delta, tuning.weather_drift_seconds)
+	guide.set_weather_axes(weather.axes)
+	_follow_weather()
+	# 겹은 지금 화면이 덮는 월드 사각형 위에 얹는다. 액터 다음이라 캐릭터 위에도 떨어진다.
+	# ⚠️ **카메라를 먼저 옮기고** 재야 한다. 뒤에 옮기면 겹이 한 프레임 늦게 따라와
+	#    빠르게 달릴 때 진행 방향 가장자리가 빈다.
+	_camera.global_position = player.position
+	_weather_layers.update(delta, weather.axes, weather_view_rect(),
+		float(tuning.daypart_daylight.get(daypart, 1.0)),
+		float(tuning.daypart_sun_height.get(daypart, 1.0)))
+	_snow.update(delta, float(weather.axes.get("snow", 0.0)),
+		float(weather.axes.get("wind", 0.3)), camera_visible_rect())
 	_advance_palette(delta)
 	_apply_eyeshine()
 	_update_interaction(delta)
 	metrics.update(delta)
-
-	_camera.global_position = player.position
 	_overlay.refresh(_build_state())
 
 
@@ -137,6 +177,9 @@ func _spawn_player() -> void:
 	player = _make_actor(config)
 	player.position = _bounds.size * 0.5
 	player.speed_tiles = tuning.move_speed
+	# 물가·바위는 못 밟는다. **동물에게는 걸리지 않는다** — 서식지이기 때문이다.
+	# 교감은 근처에서 되므로 물가에 선 수달을 물가 밖에서 부를 수 있다.
+	player.confine = _terrain_confine(player)
 
 
 func _spawn_companions(species_by_id: Dictionary) -> void:
@@ -162,6 +205,12 @@ func _collect_targets(species_by_id: Dictionary) -> Array:
 			continue
 		targets.append(species_by_id[id])
 	return targets
+
+
+## 막힌 지형을 그 액터의 habitat 으로 판정한다. 개는 물을 못 건너고 수달은 건넌다.
+func _terrain_confine(actor: Actor) -> Callable:
+	return func(from: Vector2, at: Vector2) -> Vector2:
+		return terrain.slide(from, at.clamp(_bounds.position, _bounds.end), schema, actor.habitat)
 
 
 func _make_actor(config: Dictionary) -> Actor:
@@ -316,10 +365,21 @@ func _update_interaction(delta: float) -> void:
 		player.look_direction = gauge.target.position - player.position
 		if Input.is_action_just_pressed("interact_cancel"):
 			gauge.cancel()  # 취소는 플레이어가 명시적으로 누를 때만
-		elif gauge.update(delta):
+			return
+		if gauge.update(delta, player.position.distance_to(gauge.target.position)):
 			sim.invite(gauge.target)
 			metrics.note_invited()
-			gauge.cancel()
+			gauge.close()
+			return
+		# 멈춰 있는 동안에는 다른 아이에게 갈 수 있다. 점유 중일 때는 못 바꾼다 —
+		# 지금 하고 있는 일이 있는데 딴 데를 누르면 그게 더 이상하다.
+		if not (gauge.paused and Input.is_action_just_pressed("interact")):
+			return
+		var other := _nearest_interactable()
+		if other == null or other == gauge.target:
+			return
+		gauge.close()   # 쏟은 시간은 그 아이에게 남는다
+		gauge.start(other, _lead_companion_for(other), daypart)
 		return
 
 	player.look_direction = Vector2.ZERO
@@ -361,19 +421,104 @@ func _handle_debug_input() -> void:
 		_toggle_companion(0)
 	if Input.is_action_just_pressed("debug_toggle_companion_2"):
 		_toggle_companion(1)
+	if Input.is_action_just_pressed("debug_cycle_weather"):
+		weather._pick_target()   # 다음 날씨로 넘어가는 것을 눈으로 보려고 두는 치트
+	if Input.is_action_just_pressed("debug_cycle_snow"):
+		# 눈은 계절이 생긴 뒤에만 저절로 온다 (weather.json 의 season_note).
+		# 그 전에도 눈으로 확인할 수 있게 열어두는 치트다.
+		_cycle_snow()
 	if Input.is_action_just_pressed("debug_cycle_daypart"):
 		_apply_daypart(DAYPARTS[(DAYPARTS.find(daypart) + 1) % DAYPARTS.size()])
 	if Input.is_action_just_pressed("debug_reset_run"):
 		_restart_run()
 
 
+const SNOW_CHEAT := ["진눈깨비", "눈", "함박눈"]
+
+func _cycle_snow() -> void:
+	var presets: Dictionary = weather.data.get("presets", {})
+	# 지금 목표가 눈이면 다음 단계로, 아니면 처음부터. 끝까지 갔으면 평소 날씨로 돌아간다.
+	var at := -1
+	for i in SNOW_CHEAT.size():
+		if presets.has(SNOW_CHEAT[i]) \
+				and is_equal_approx(float(weather.target.get("snow", 0.0)),
+					float(presets[SNOW_CHEAT[i]].get("snow", 0.0))):
+			at = i
+	var next: String = SNOW_CHEAT[at + 1] if at + 1 < SNOW_CHEAT.size() else ""
+	if next.is_empty() or not presets.has(next):
+		weather._pick_target()
+		return
+	weather.target = (presets[next] as Dictionary).duplicate()
+
+
+## 날씨 겹을 깔 월드 사각형.
+##
+## ⚠️ **카메라가 실제로 보는 곳에 깐다.** `global_position` 은 카메라가 *가려는* 곳이지
+##    보고 있는 곳이 아니다 — 맵 끝에서는 `limit_*` 이 잡아 세우고, 달리는 동안은
+##    `position_smoothing` 이 뒤처진다. 플레이어 위치로 깔았더니 구석에서 화면 한쪽이
+##    맨땅으로 남았다 (사용자 지적). `get_screen_center_position()` 이 둘 다 반영한다.
+## ⚠️ 화면 크기를 그대로 쓰면 **가장자리에서 겹이 끝난다**. 창 종횡비가 기준과 어긋나면
+##    뷰포트가 기준 해상도보다 커지는데 겹은 기준값으로 깔린다.
+##    타일 반복이라 넓게 까는 값은 공짜다. 넉넉히 덮는다.
+func weather_view_rect() -> Rect2:
+	var half := get_viewport_rect().size / (2.0 * tuning.camera_zoom) * WEATHER_MARGIN
+	return Rect2(_camera.get_screen_center_position() - half, half * 2.0)
+
+
+## 카메라가 지금 실제로 비추는 월드 사각형. 겹이 이걸 덮는지 회귀로 잰다.
+func camera_visible_rect() -> Rect2:
+	var size := get_viewport_rect().size / tuning.camera_zoom
+	return Rect2(_camera.get_screen_center_position() - size * 0.5, size)
+
+
 func _apply_daypart(next: String) -> void:
 	# 지금 색에서 새 색으로 넘어간다. 튀지 않게 보간하는 것이 핵심이다 (HANDOFF §2-4).
 	_palette_from = _blended_palette_name()
 	daypart = next
+	# ★ 시간대는 감각 반경만 바꾸는 게 아니라 **누가 나와 있는가**를 바꾼다.
+	#   밤에만 나오는 동물은 낮에 아예 없다.
+	if schema != null:
+		for change in sim.apply_daypart(schema, daypart, weather.axes):
+			if not change["was_visible"]:
+				continue
+			# 눈앞에서 사라졌다면 먼지를 남긴다. 그냥 없어지면 사라진 줄도 모른다.
+			var animal: FieldSim.WildAnimal = change["animal"]
+			_puffs.append({
+				"position": animal.position + Vector2(0, -10),
+				"age": 0.0,
+				"hiding": not change["present"],
+			})
 	_palette_to = _palette_of(daypart)
 	_palette_t = 0.0 if _palette_from != _palette_to else 1.0
 	guide.set_daypart(daypart)
+
+
+## 날씨가 **누가 나오는지**를 바꾼다. 축이 계속 흐르므로 매 프레임 다시 굴리면
+## 동물이 깜빡인다 — 날씨의 **이름이 바뀔 때만** 다시 정한다.
+func _follow_weather() -> void:
+	var name := weather.nickname()
+	if name == _last_weather_name:
+		return
+	_last_weather_name = name
+	for change in sim.apply_daypart(schema, daypart, weather.axes):
+		if not change["was_visible"]:
+			continue
+		var animal: FieldSim.WildAnimal = change["animal"]
+		_puffs.append({
+			"position": animal.position + Vector2(0, -10),
+			"age": 0.0,
+			"hiding": not change["present"],
+		})
+
+
+## 지형 구성 — 어느 지형이 몇 타일인가. 날씨가 이걸 보고 어느 축을 세울지 정한다.
+func _terrain_mix() -> Dictionary:
+	var mix := {}
+	for y in tuning.map_size.y:
+		for x in tuning.map_size.x:
+			var name := terrain.at_tile(Vector2i(x, y))
+			mix[name] = int(mix.get(name, 0)) + 1
+	return mix
 
 
 func _palette_of(name: String) -> String:
@@ -395,7 +540,8 @@ func _advance_palette(delta: float) -> void:
 	if DayPalette.set_blend(_palette_from, _palette_to, _palette_t):
 		_ground.refresh_textures()
 		PropScatter.refresh_textures(_props)
-	_modulate.color = DayPalette.tint()
+	# 시간대 틴트 × 날씨 틴트. 팔레트는 시간대만 건드린다 — 곱셈이 아니라 덧셈이 되는 자리다.
+	_modulate.color = DayPalette.tint() * weather.tint()
 
 
 ## 첫 유도까지 걸린 시간을 다시 재려면 필드를 다시 깔아야 한다.
@@ -422,10 +568,18 @@ func _build_state() -> Dictionary:
 		"gauge": gauge,
 		"hit": _current_hit,
 		"daypart": daypart,
+		"weather": weather.nickname(),
+		"weather_axes": weather.axes,
+		"weather_summary": weather.summary(),
+		"present_count": sim.count_present(),
+		"roster": sim.roster(),
+		"sex_mix": sim.sex_mix(),
+		"total_count": sim.animals.size(),
 		"active_count": sim.count_active(),
 		"shallow_count": sim.count_shallow(),
 		"companions": _companion_status(),
 		"clues": _clues,
+		"partial": _partial_invites(),
 		"puffs": _puffs,
 		"puff_life": PUFF_LIFE,
 		"visible_count": _visible_count(),
@@ -444,6 +598,21 @@ func _sense_status() -> String:
 			parts.append("%s %s %.0f타일" % [
 				companion.display_name, sense, guide.reach_tiles(companion, String(sense))])
 	return "   ".join(parts) if not parts.is_empty() else "(데려간 동료 없음)"
+
+
+## 쏟다 만 아이들. 진행은 누적으로 보여야 한다(원칙 3) —
+## 어디까지 했는지 안 보이면 다시 찾아갈 이유가 안 생긴다.
+func _partial_invites() -> Array:
+	var out: Array = []
+	for animal in sim.active_animals():
+		if animal.invite_progress <= 0.01:
+			continue
+		if gauge.active and animal == gauge.target:
+			continue
+		if not animal.actor.visible:
+			continue
+		out.append({"position": animal.actor.head_position(), "progress": animal.invite_progress})
+	return out
 
 
 func _visible_count() -> int:

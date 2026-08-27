@@ -9,15 +9,13 @@ extends Control
 
 const DATA_PATH := "res://sprites/extracted/ui/logo.json"
 const ART_ROOT := "res://sprites/extracted/"
-const STILL_PATH := "res://sprites/extracted/ui/logo_screen.png"
-const FIELD_SCENE := "res://scenes/ui/Title.tscn"
+const NEXT_SCENE := "res://scenes/ui/Title.tscn"
 
 ## 마지막 프레임에서 머무는 시간. json 의 시퀀스가 끝난 뒤다.
 @export var hold_after := 0.7
 @export var fade_out := 0.45
 
 @onready var _background: ColorRect = $Background
-@onready var _still: TextureRect = $Logo
 
 var _frame_seconds := 0.08
 var _sequence_frames := 32
@@ -32,7 +30,9 @@ var _leaving := false
 
 func _ready() -> void:
 	if not _build_from_data():
-		_use_still()
+		# logo_screen.png 은 검수용이라 게임에서 읽지 않는다.
+		# 조각이 없으면 로고를 건너뛴다 — 로고가 게임을 막지 않는다.
+		_leave()
 
 
 ## json 이 있으면 조각을 놓고 애니메이션한다. 없으면 false.
@@ -91,21 +91,6 @@ func _sprite(relative: String, at) -> Sprite2D:
 	return sprite
 
 
-## 조각이 없으면 완성 스틸 한 장으로 떨어진다. 로고가 게임을 막지 않는다.
-func _use_still() -> void:
-	for entry in _paws:
-		entry["node"].queue_free()
-	_paws.clear()
-	if _mark != null:
-		_mark.queue_free()
-		_mark = null
-	if ResourceLoader.exists(STILL_PATH):
-		_still.texture = load(STILL_PATH)
-		_sequence_frames = 0
-	else:
-		_leave()
-
-
 func _process(delta: float) -> void:
 	if _leaving:
 		return
@@ -142,4 +127,4 @@ func _leave() -> void:
 	_leaving = true
 	# _ready 안에서 부를 수도 있다 (로고 파일이 없을 때). 그때 바로 바꾸면
 	# "Parent node is busy adding/removing children" 로 터진다.
-	get_tree().change_scene_to_file.call_deferred(FIELD_SCENE)
+	get_tree().change_scene_to_file.call_deferred(NEXT_SCENE)

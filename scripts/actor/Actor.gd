@@ -20,6 +20,11 @@ var move_vector := Vector2.ZERO
 var speed_tiles := 3.0
 ## 필드 밖으로 나가지 않게 하는 경계 (픽셀)
 var bounds := Rect2()
+## 경계가 사각형이 아닐 때 쓴다 — 울타리처럼 한 군데만 뚫려 있는 경우.
+## `func(from: Vector2, to: Vector2) -> Vector2`. 비어 있으면 bounds 로 자른다.
+## 이전 위치를 같이 넘기는 것은 **막힌 곳에서 미끄러지게** 하기 위해서다 —
+## 그냥 되돌리면 벽에 비스듬히 붙었을 때 아예 안 움직인다.
+var confine := Callable()
 ## 특징 동작(개의 꼬리흔들기)을 재생할 것인가. 유도 중인 동료가 켠다 —
 ## "동료가 그 방향을 보고 킁킁댄다"가 장식이 아니라 기능이 되는 지점이다. (BRIEF §3.3)
 var play_special := false
@@ -32,10 +37,20 @@ var display_name := ""
 var diet := ""
 var activity := ""
 var senses: Array = []
+## 이 동물이 들어갈 수 있는 막힌 지형. 기본 지형은 habitat 과 무관하게 지나간다.
+var habitat: Array = []
 var traits: Array = []
+## 개체의 성별. 개체 정의 때 정해진다 (BRIEF §3.11 1단계) — 원정 중에 바뀌지 않는다.
+## 화면에서 보인다: 이형이 있는 종은 도트로, 없는 종은 이름표 뱃지로. (§4.9)
+var sex := ""
 ## 개체값 — 능력치가 무언가를 결정해야 한다 (BRIEF §2.5)
 var sense_scale := 1.0
 var charm := 1.0
+## 이 개체의 이동속도 배율. 종마다 범위가 다르고 개체마다 그 안에서 다르다 —
+## 두꺼비는 느리고 참새는 빠르다. **숫자로 보여주지 않는다. 걷는 걸 보면 안다.**
+var move_scale := 1.0
+## 이 개체의 개성. 선택지는 종 데이터(quirk_pool)가 갖는다. 없을 수도 있다.
+var quirks: Array = []
 
 var facing := "south"
 var canvas := Vector2i(32, 32)
@@ -50,21 +65,43 @@ var _tuning: FieldTuning = null
 var _moving := false
 
 
+## 성별 하나. 반반이다 — 확률을 화면에 노출하지 않으므로 기울일 이유가 없다.
+static func roll_sex(rng: RandomNumberGenerator) -> String:
+	return "male" if rng.randf() < 0.5 else "female"
+
+
+## 마릿수만큼 성별을 뽑되, **둘 이상이면 암수가 반드시 섞인다.**
+## 짝이 없다는 이유로 영구히 막히는 일을 구조적으로 없앤다 (BRIEF §2.4 확정 배치).
+## `required` 를 주면 그 성별이 반드시 하나 들어간다 — 집에 혼자인 개체가 있을 때 쓴다.
+static func roll_sexes(count: int, rng: RandomNumberGenerator, required := "") -> Array:
+	var out: Array = []
+	for i in count:
+		out.append(roll_sex(rng))
+	if count >= 2 and out.count(out[0]) == count:
+		out[rng.randi_range(0, count - 1)] = "female" if out[0] == "male" else "male"
+	if not required.is_empty() and count > 0 and not (required in out):
+		out[rng.randi_range(0, count - 1)] = required
+	return out
+
+
 ## config 는 animals.json 의 종 정의 한 덩어리다. 플레이어처럼 종이 없는 액터는
 ## 같은 모양의 딕셔너리를 만들어 넘긴다 — 특수 분기를 만들지 않기 위해서다.
-func setup(config: Dictionary, schema: TagSchema, tuning: FieldTuning, rng: RandomNumberGenerator) -> void:
+func setup(config: Dictionary, schema: TagSchema, tuning: FieldTuning,
+		rng: RandomNumberGenerator, individual_sex := "") -> void:
 	_shadow = get_node("Shadow")
 	_body = get_node("Body")
 	_body_sprite = get_node("Body/BodySprite")
 	_emote = get_node("Body/Emote")
 
 	species = config
+	sex = individual_sex if not individual_sex.is_empty() else roll_sex(rng)
 	_tuning = tuning
 	species_id = String(config.get("id", ""))
 	display_name = String(config.get("name", species_id))
 	diet = String(config.get("diet", ""))
 	activity = String(config.get("activity", ""))
 	senses = config.get("senses", [])
+	habitat = config.get("habitat", [])
 	traits = config.get("traits", [])
 	canvas = SpriteLibrary.canvas_for(species_id,
 		schema.canvas_for(String(config.get("size_class", "중"))))
@@ -72,6 +109,9 @@ func setup(config: Dictionary, schema: TagSchema, tuning: FieldTuning, rng: Rand
 	var stats: Dictionary = config.get("stats_range", {})
 	sense_scale = _roll(stats.get("sense_range", [1.0, 1.0]), rng)
 	charm = _roll(stats.get("charm", [1.0, 1.0]), rng)
+	quirks = roll_quirks(config, schema, rng)
+	move_scale = _roll(stats.get("move_speed", [1.0, 1.0]), rng) \
+		* schema.quirk_product(quirks, "move_scale")
 
 	var sprite_set: Dictionary = SpriteLibrary.apply_meta_anchors(
 		species_id, config.get("sprite_set", {}))
@@ -93,7 +133,7 @@ func setup(config: Dictionary, schema: TagSchema, tuning: FieldTuning, rng: Rand
 	_shadow.texture = shadow_texture
 	_shadow.position = -shadow_texture.get_size() * 0.5
 
-	_body.setup(sprite_set, canvas, canvas_offset, has_drawn_art, species_id)
+	_body.setup(sprite_set, canvas, canvas_offset, has_drawn_art, species_id, sex)
 	_emote.setup(sprite_set, canvas_offset)
 	_apply_facing("south")
 
@@ -103,9 +143,12 @@ func _process(delta: float) -> void:
 		return
 	_moving = move_vector.length() > 0.05
 	if _moving:
-		var step := move_vector.normalized() * speed_tiles * _tuning.tile_size * delta
+		var step := move_vector.normalized() * speed_tiles * move_scale * _tuning.tile_size * delta
+		var came_from := position
 		position += step
-		if bounds.size != Vector2.ZERO:
+		if confine.is_valid():
+			position = confine.call(came_from, position)
+		elif bounds.size != Vector2.ZERO:
 			position = position.clamp(bounds.position, bounds.end)
 		_apply_facing(_facing_from(move_vector))
 		_walk_phase += delta * _tuning.walk_cycle_hz
@@ -168,6 +211,19 @@ func hide_sense_icon() -> void:
 ## 게이지·이펙트를 띄울 머리 위 월드 좌표
 func head_position() -> Vector2:
 	return position + Vector2(0, canvas_offset.y - 6)
+
+## 종이 내건 선택지에서 개성을 뽑는다. 코드가 개성 이름을 고르지 않는다.
+static func roll_quirks(config: Dictionary, schema: TagSchema, rng: RandomNumberGenerator) -> Array:
+	var pool: Array = config.get("quirk_pool", []).duplicate()
+	var span: Array = config.get("quirk_count", [0, 0])
+	if pool.is_empty() or span.size() < 2:
+		return []
+	var count := rng.randi_range(int(span[0]), mini(int(span[1]), pool.size()))
+	var picked: Array = []
+	for i in count:
+		picked.append(pool.pop_at(rng.randi_range(0, pool.size() - 1)))
+	return picked
+
 
 static func _roll(range_array, rng: RandomNumberGenerator) -> float:
 	if typeof(range_array) != TYPE_ARRAY or range_array.size() < 2:

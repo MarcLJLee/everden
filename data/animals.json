@@ -81,8 +81,21 @@
         "charm": [
           1.0,
           1.3
+        ],
+        "move_speed": [
+          0.95,
+          1.15
         ]
       },
+      "quirk_pool": [
+        "느긋함",
+        "재빠름",
+        "붙임성"
+      ],
+      "quirk_count": [
+        0,
+        1
+      ],
       "sprite_set": {
         "eye_style": "round",
         "mouth_style": "wide",
@@ -191,7 +204,22 @@
         "charm": [
           1.1,
           1.4
+        ],
+        "move_speed": [
+          1.0,
+          1.25
         ]
+      },
+      "quirk_pool": [
+        "재빠름",
+        "수줍음"
+      ],
+      "quirk_count": [
+        0,
+        1
+      ],
+      "weather_likes": {
+        "rain": 0.5
       },
       "sprite_set": {
         "eye_style": "round",
@@ -299,7 +327,23 @@
         "charm": [
           1.1,
           1.4
+        ],
+        "move_speed": [
+          1.2,
+          1.5
         ]
+      },
+      "quirk_pool": [
+        "재빠름",
+        "수줍음"
+      ],
+      "quirk_count": [
+        1,
+        2
+      ],
+      "weather_likes": {
+        "rain": 0.45,
+        "wind": 0.7
       },
       "sprite_set": {
         "eye_style": "big",
@@ -407,7 +451,22 @@
         "charm": [
           0.9,
           1.2
+        ],
+        "move_speed": [
+          0.8,
+          1.0
         ]
+      },
+      "quirk_pool": [
+        "느긋함",
+        "수줍음"
+      ],
+      "quirk_count": [
+        0,
+        1
+      ],
+      "weather_likes": {
+        "rain": 1.25
       },
       "sprite_set": {
         "eye_style": "narrow",
@@ -514,7 +573,23 @@
         "charm": [
           1.2,
           1.5
+        ],
+        "move_speed": [
+          0.9,
+          1.15
         ]
+      },
+      "quirk_pool": [
+        "재빠름",
+        "붙임성"
+      ],
+      "quirk_count": [
+        0,
+        1
+      ],
+      "weather_likes": {
+        "rain": 1.5,
+        "fog": 1.2
       },
       "sprite_set": {
         "eye_style": "dot",
@@ -623,7 +698,23 @@
         "charm": [
           0.7,
           1.0
+        ],
+        "move_speed": [
+          1.15,
+          1.45
         ]
+      },
+      "quirk_pool": [
+        "재빠름",
+        "수줍음"
+      ],
+      "quirk_count": [
+        1,
+        1
+      ],
+      "weather_likes": {
+        "fog": 1.35,
+        "rain": 0.8
       },
       "sprite_set": {
         "eye_style": "big",
@@ -728,7 +819,23 @@
         "charm": [
           0.6,
           0.9
+        ],
+        "move_speed": [
+          1.1,
+          1.35
         ]
+      },
+      "quirk_pool": [
+        "재빠름",
+        "수줍음"
+      ],
+      "quirk_count": [
+        0,
+        1
+      ],
+      "weather_likes": {
+        "fog": 1.2,
+        "rain": 0.7
       },
       "sprite_set": {
         "eye_style": "narrow",
@@ -834,7 +941,22 @@
         "charm": [
           0.8,
           1.1
+        ],
+        "move_speed": [
+          0.4,
+          0.6
         ]
+      },
+      "quirk_pool": [
+        "느긋함"
+      ],
+      "quirk_count": [
+        0,
+        1
+      ],
+      "weather_likes": {
+        "rain": 2.2,
+        "fog": 1.3
       },
       "sprite_set": {
         "eye_style": "big",
@@ -942,7 +1064,23 @@
         "charm": [
           0.9,
           1.2
+        ],
+        "move_speed": [
+          1.2,
+          1.6
         ]
+      },
+      "quirk_pool": [
+        "재빠름",
+        "수줍음"
+      ],
+      "quirk_count": [
+        0,
+        1
+      ],
+      "weather_likes": {
+        "rain": 0.4,
+        "wind": 0.6
       },
       "sprite_set": {
         "eye_style": "dot",
@@ -1050,7 +1188,23 @@
         "charm": [
           1.0,
           1.3
+        ],
+        "move_speed": [
+          1.3,
+          1.7
         ]
+      },
+      "quirk_pool": [
+        "재빠름",
+        "수줍음"
+      ],
+      "quirk_count": [
+        1,
+        1
+      ],
+      "weather_likes": {
+        "rain": 0.35,
+        "wind": 0.5
       },
       "sprite_set": {
         "eye_style": "dot",
@@ -1158,7 +1312,23 @@
         "charm": [
           0.6,
           0.9
+        ],
+        "move_speed": [
+          0.7,
+          0.95
         ]
+      },
+      "quirk_pool": [
+        "느긋함",
+        "수줍음"
+      ],
+      "quirk_count": [
+        0,
+        1
+      ],
+      "weather_likes": {
+        "rain": 0.6,
+        "cloud": 1.15
       },
       "sprite_set": {
         "eye_style": "big",

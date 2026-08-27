@@ -13,6 +13,7 @@ const SUPPORTED_BEHAVIOR_SCHEMA := 1
 
 const TAGS_PATH := "res://data/tags.json"
 const ANIMALS_PATH := "res://data/animals.json"
+const REGIONS_PATH := "res://data/regions.json"
 
 ## 종 정의에 반드시 있어야 하는 필드
 const REQUIRED_FIELDS := [
@@ -34,6 +35,7 @@ class Result extends RefCounted:
 	var warnings := PackedStringArray()
 	var schema: TagSchema = null
 	var species := {}  ## id -> Dictionary (검증·보정을 마친 종 정의)
+	var regions := {}  ## id -> Dictionary (지역 생태)
 
 	func reject(reason: String) -> void:
 		ok = false
@@ -89,9 +91,37 @@ static func load_all(prototype_only := true, tags_path := TAGS_PATH, animals_pat
 		if result.ok:
 			result.species[String(species["id"])] = species
 
+	_load_regions(result, prototype_only)
+
 	if not result.ok:
 		result.species.clear()
+		result.regions.clear()
 	return result
+
+
+## 지역 생태 — 어느 종이 이 지역에 얼마나 있는가. 없어도 게임은 돈다(전 종이 기본값).
+static func _load_regions(result: Result, prototype_only: bool) -> void:
+	if not FileAccess.file_exists(REGIONS_PATH):
+		result.warn("지역 파일이 없습니다 — 모든 종이 기본 마릿수로 나옵니다")
+		return
+	var parsed = JSON.parse_string(FileAccess.get_file_as_string(REGIONS_PATH))
+	if typeof(parsed) != TYPE_DICTIONARY:
+		result.reject("JSON 파싱 실패: " + REGIONS_PATH)
+		return
+	for entry in parsed.get("regions", []):
+		var region: Dictionary = entry
+		var id := String(region.get("id", ""))
+		if id.is_empty():
+			result.error("지역에 id 가 없습니다")
+			continue
+		for species_id in region.get("ecology", {}):
+			if not result.species.has(String(species_id)):
+				# prototype 만 불러왔으면 없는 게 정상이다. 전체를 불렀는데 없으면 오타다.
+				if not prototype_only:
+					result.error("%s 지역의 '%s' 는 종 데이터에 없습니다" % [id, species_id])
+			elif float(region["ecology"][species_id]) < 0.0:
+				result.error("%s.ecology.%s 는 0 보다 작을 수 없습니다" % [id, species_id])
+		result.regions[id] = region
 
 
 static func _read_json(path: String, result: Result) -> Dictionary:
@@ -141,6 +171,40 @@ static func _validate_species(species: Dictionary, schema: TagSchema, result: Re
 		sprite_set[field] = fallback
 		result.warn("%s.sprite_set.%s = '%s' 는 모르는 값입니다 → '%s' 로 대체했습니다"
 			% [id, field, value, fallback])
+
+	# 개성 — 선택지는 종이 갖되, 이름은 tags.json 의 어휘여야 한다
+	for quirk in species.get("quirk_pool", []):
+		if not schema.quirks.has(String(quirk)):
+			result.error("%s.quirk_pool 의 '%s' 는 tags.json 의 quirks 에 없습니다 (가능: %s)"
+				% [id, quirk, ", ".join(PackedStringArray(schema.quirk_names()))])
+	var count: Array = species.get("quirk_count", [])
+	if count.size() == 2:
+		if int(count[0]) < 0 or int(count[1]) < int(count[0]):
+			result.error("%s.quirk_count = %s 가 이상합니다 (최소, 최대)" % [id, count])
+		if int(count[1]) > species.get("quirk_pool", []).size():
+			result.warn("%s.quirk_count 최대 %d 가 quirk_pool(%d개)보다 큽니다 — 풀만큼만 나옵니다"
+				% [id, int(count[1]), species.get("quirk_pool", []).size()])
+
+	# 날씨 취향 — 축 이름은 weather.json 의 다섯 축이어야 한다
+	const WEATHER_AXES := ["cloud", "fog", "rain", "snow", "wind"]
+	for axis in species.get("weather_likes", {}):
+		if not (String(axis) in WEATHER_AXES):
+			result.error("%s.weather_likes 에 모르는 날씨 축 '%s' 가 있습니다 (가능: %s)"
+				% [id, axis, ", ".join(PackedStringArray(WEATHER_AXES))])
+		elif float(species["weather_likes"][axis]) <= 0.0:
+			# 0 으로 막으면 "이 날씨엔 절대 안 나온다"가 되어 기다림을 강요한다
+			result.error("%s.weather_likes.%s 는 0 보다 커야 합니다 — 아무 날씨에나 만날 수 있어야 합니다"
+				% [id, axis])
+
+	# presence — 종이 활동 조건을 직접 들 수 있다. 키와 범위를 본다.
+	for daypart in species.get("presence", {}):
+		var known := schema.dayparts()
+		if not known.is_empty() and not (String(daypart) in known):
+			result.error("%s.presence 에 모르는 시간대 '%s' 가 있습니다 (가능: %s)"
+				% [id, daypart, ", ".join(PackedStringArray(known))])
+		var chance := float(species["presence"][daypart])
+		if chance < 0.0 or chance > 1.0:
+			result.error("%s.presence.%s = %s 는 0~1 이어야 합니다" % [id, daypart, chance])
 
 	# 규칙 4 — size_class 파생 불일치는 경고까지만 (수동 오버라이드 허용)
 	var adult_size := String(species.get("size", {}).get("adult", ""))

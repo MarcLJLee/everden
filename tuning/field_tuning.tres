@@ -21,6 +21,7 @@ reveal_radius = 3.0
 guide_radius = 10.0
 activation_radius = 26.0
 interact_radius = 1.5
+hold_radius = 2.6
 base_gauge_time = 3.0
 mismatch_factor = 1.5
 camera_zoom = 2.0
@@ -30,6 +31,17 @@ daypart_palette = {
 "여명": "dusk"
 }
 daypart_fade = 1.2
+daypart_daylight = {
+"낮": 1.0,
+"밤": 0.0,
+"여명": 0.4
+}
+daypart_sun_height = {
+"낮": 1.0,
+"밤": 0.0,
+"여명": 0.12
+}
+weather_drift_seconds = 22.0
 eyeshine_color = Color(0.98, 0.96, 0.55, 1)
 bounce_height_px = 1
 walk_cycle_hz = 6.0

@@ -7,7 +7,7 @@
 extends SceneTree
 
 ## 이 아래로 떨어지면 어딘가에서 판정이 조용히 끊긴 것이다.
-const FLOOR := 372
+const FLOOR := 380
 
 var _pass := 0
 var _fail := 0
@@ -1769,6 +1769,51 @@ func _test_weather(field, game) -> void:
 	for animal in was_present:
 		animal.present = bool(was_present[animal])
 	field.set_process(true)
+
+	# ★ **게이지는 동물 머리 위에 뜬다** (ui/screens.json · 사용자 지적).
+	#   화면 구석의 막대가 아니라 그 아이 위에 있어야 누구와 친해지는 중인지 보인다.
+	var marks_node: GaugeMarks = field.get_node("GaugeMarks")
+	_check("게이지 표시가 있다", marks_node != null)
+	var target := _find_animal(field, "raccoon_dog")
+	target.present = true
+	target.position = field.player.position + Vector2(20, 0)
+	field.sim.update(0.016, field.player.position)
+	var spare := _find_animal(field, "squirrel")
+	spare.present = true
+	spare.position = field.player.position + Vector2(-24, 0)
+	field.sim.update(0.016, field.player.position)
+	spare.invite_progress = 0.4
+	if target.actor != null:
+		field.gauge.start(target, field.companions[0], "낮")
+		field.gauge.progress = 0.55
+		var marks: Array = field._gauge_marks_now()
+		var active_mark := {}
+		for mark in marks:
+			if bool(mark.get("active", false)):
+				active_mark = mark
+		_check("채우는 중인 아이 위에 뜬다", not active_mark.is_empty(), "%d 개" % marks.size())
+		if not active_mark.is_empty():
+			var at: Vector2 = active_mark["position"]
+			# ⚠️ **캔버스가 아니라 그림 위**에 얹는다. 캔버스를 기준으로 잡으면
+			#    빈 줄만큼 붕 떠서 남의 머리 위처럼 보인다 (얼굴·풀에서 같은 실수를 했다).
+			_check("그림 위에 얹는다 — 캔버스 위가 아니라",
+				at.y > target.actor.position.y - target.actor.canvas.y,
+				"표시 y=%.0f · 캔버스 위 y=%.0f"
+					% [at.y, target.actor.position.y - target.actor.canvas.y])
+			_check("발끝보다는 위다", at.y < target.actor.position.y)
+		# ★ **쏟은 시간은 그 아이에게 남는다** — 지금 채우는 중이 아니어도 자국이 보인다
+		var leftover := 0
+		for mark in marks:
+			if not bool(mark.get("active", false)):
+				leftover += 1
+		_check("쏟다 만 자국도 보인다 — 멈출 뿐 안 지워진다", leftover >= 1,
+			"%d 개" % leftover)
+		field.gauge.cancel()
+	# 판을 두르지 않는다 — 검은 판을 깔면 세계 밖 UI 위젯이 된다 (BRIEF §3.3)
+	# 세계 안에 그린다 — 화면에 붙는 판이 아니라 그 자리에 있는 것이다 (BRIEF §3.3)
+	_check("게이지는 세계 안에 그린다", marks_node is Node2D)
+	_check("게이지가 액터와 같은 좌표계에 있다",
+		marks_node.get_parent() == field, "%s" % marks_node.get_parent())
 
 	# ★ 실제 날씨는 튀지 않는다 — 지금과 가까운 상태로만 옮겨간다 (사용자 지적)
 	var walker := WeatherSystem.new()

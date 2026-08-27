@@ -51,6 +51,8 @@ var sex := ""
 ## ★ 개·고양이·다람쥐의 4방향 도트를 **버리지는 않는다.** 본체는 능력을 갖고
 ##   얼마나 쓸지는 데이터(`sprite_set.facing`)가 정한다. 지금 four 는 플레이어뿐이다.
 var facing_set := "side"
+## 그림의 우듬지가 발끝에서 얼마나 위인가(px). **캔버스가 아니라 그림 기준**이다.
+var crown_lift := 0.0
 ## 개체값 — 능력치가 무언가를 결정해야 한다 (BRIEF §2.5)
 var sense_scale := 1.0
 var charm := 1.0
@@ -148,6 +150,9 @@ func setup(config: Dictionary, schema: TagSchema, tuning: FieldTuning,
 	# 캔버스 바닥이 아니라 **그림의 접지선**이 Actor 원점에 와야 한다.
 	var ground: Dictionary = SpriteLibrary.ground_info(species_id, art["frames"], canvas)
 	canvas_offset = Vector2(-int(canvas.x / 2.0), -(canvas.y - int(ground["gap"])))
+	# ⚠️ 머리 위에 얹는 것은 **그림 위**에 얹어야 한다. 캔버스 위를 기준으로 잡으면
+	#    빈 줄만큼 붕 뜬다 — 얼굴 오리기·풀 흔들림에서 겪은 것과 같은 실수다.
+	crown_lift = float(canvas.y - int(ground["gap"]) - int(ground["crown"]))
 	if not art["missing"].is_empty():
 		SpriteLibrary.warn_once(species_id, "%s: 그림이 없어 대역으로 채운 애니메이션 — %s"
 			% [species_id, ", ".join(art["missing"])])
@@ -239,8 +244,9 @@ func hide_sense_icon() -> void:
 	_emote.hide_icon()
 
 ## 게이지·이펙트를 띄울 머리 위 월드 좌표
+## 머리 위 한 뼘. 감각 아이콘·게이지·먼지가 여기 뜬다.
 func head_position() -> Vector2:
-	return position + Vector2(0, canvas_offset.y - 6)
+	return position + Vector2(0, -crown_lift - 4.0)
 
 ## 종이 내건 선택지에서 개성을 뽑는다. 코드가 개성 이름을 고르지 않는다.
 static func roll_quirks(config: Dictionary, schema: TagSchema, rng: RandomNumberGenerator) -> Array:

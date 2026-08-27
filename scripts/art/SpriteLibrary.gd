@@ -186,7 +186,9 @@ static func ground_info(species_id: String, frames: SpriteFrames, canvas: Vector
 	if _ground_cache.has(species_id):
 		return _ground_cache[species_id]
 
-	var result := {"gap": 0, "foot_width": maxi(canvas.x - 4, 4)}
+	# crown 은 **그림이 시작되는 줄**이다. 캔버스 위가 아니다 —
+	# 머리 위에 무언가 얹을 때 캔버스를 기준으로 잡으면 빈 줄만큼 붕 뜬다.
+	var result := {"gap": 0, "foot_width": maxi(canvas.x - 4, 4), "crown": 0}
 	var image := _first_frame_image(frames)
 	if image != null:
 		var gap := 0
@@ -197,6 +199,12 @@ static func ground_info(species_id: String, frames: SpriteFrames, canvas: Vector
 				continue
 			bottom = y
 			break
+		var crown := 0
+		for y in image.get_height():
+			if not _row_is_empty(image, y):
+				crown = y
+				break
+		result["crown"] = crown
 		if bottom >= 0:
 			var first := -1
 			var last := -1

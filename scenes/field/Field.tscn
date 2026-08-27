@@ -8,6 +8,7 @@
 [ext_resource type="Script" path="res://scripts/field/WeatherLayers.gd" id="6_weather"]
 [ext_resource type="Script" path="res://scripts/field/SnowField.gd" id="9_snow"]
 [ext_resource type="Script" path="res://scripts/field/AmbientLife.gd" id="10_ambient"]
+[ext_resource type="Script" path="res://scripts/field/GaugeMarks.gd" id="14_gauge"]
 [ext_resource type="PackedScene" path="res://scenes/ui/InviteCard.tscn" id="11_card"]
 [ext_resource type="PackedScene" path="res://scenes/ui/GoHome.tscn" id="12_gohome"]
 [ext_resource type="PackedScene" path="res://scenes/ui/FieldHud.tscn" id="13_hud"]
@@ -22,6 +23,9 @@ script = ExtResource("2_ground")
 
 [node name="Actors" type="Node2D" parent="."]
 y_sort_enabled = true
+
+[node name="GaugeMarks" type="Node2D" parent="."]
+script = ExtResource("14_gauge")
 
 [node name="AmbientAir" type="Node2D" parent="."]
 script = ExtResource("10_ambient")

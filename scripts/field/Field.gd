@@ -24,6 +24,7 @@ const WEATHER_MARGIN := 1.6
 @onready var _card: CanvasLayer = $InviteCard
 @onready var _go_home: CanvasLayer = $GoHome
 @onready var _hud: CanvasLayer = $FieldHud
+@onready var _gauge_marks: GaugeMarks = $GaugeMarks
 @onready var _camera: Camera2D = $Camera2D
 @onready var _overlay = $DebugOverlay
 @onready var _modulate: CanvasModulate = $CanvasModulate
@@ -185,6 +186,7 @@ func _process(delta: float) -> void:
 	_update_interaction(delta)
 	metrics.update(delta)
 	_hud.refresh(String(_region_name), Game.collection.size(), tuning.home_seats)
+	_gauge_marks.show_marks(_gauge_marks_now())
 	_overlay.refresh(_build_state())
 
 
@@ -714,6 +716,19 @@ func _sense_status() -> String:
 
 ## 쏟다 만 아이들. 진행은 누적으로 보여야 한다(원칙 3) —
 ## 어디까지 했는지 안 보이면 다시 찾아갈 이유가 안 생긴다.
+## 지금 화면에 띄울 게이지들. 채우는 중인 하나와, **쏟다 만 자국들**.
+func _gauge_marks_now() -> Array:
+	var marks: Array = _partial_invites()
+	if gauge.active and gauge.target != null and gauge.target.actor != null:
+		marks.append({
+			"position": gauge.target.actor.head_position(),
+			"progress": gauge.progress,
+			"active": true,
+			"paused": gauge.paused,
+		})
+	return marks
+
+
 func _partial_invites() -> Array:
 	var out: Array = []
 	for animal in sim.active_animals():

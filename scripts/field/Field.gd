@@ -119,6 +119,9 @@ func _ready() -> void:
 	weather.setup(schema, _rng, _terrain_mix())
 	# 잡을 수 없는 생명. 지면·수면 생물은 Y-sort 안으로 들어가 캐릭터에 가린다.
 	_ambient.setup(terrain, _rng, _actors, region)
+	# ★ **나가는 길.** 이게 없어서 원정을 나가면 못 돌아왔다 (BRIEF §3.13).
+	#   여는 키는 저쪽이 갖는다 — 양쪽이 같은 키를 보면 열자마자 닫힌다.
+	_go_home.faces_provider = _going_home_faces
 	_go_home.go_home.connect(func() -> void:
 		get_tree().call_deferred("change_scene_to_file", "res://scenes/home/Home.tscn"))
 	_weather_layers.build()
@@ -142,9 +145,7 @@ func _process(delta: float) -> void:
 	var asking: bool = _card.is_open() or _go_home.is_open()
 	player.move_vector = Vector2.ZERO if asking \
 		else Input.get_vector("move_left", "move_right", "move_up", "move_down")
-	# ★ **나가는 길.** 이게 없어서 원정을 나가면 못 돌아왔다 (BRIEF §3.13).
-	if not asking and Input.is_action_just_pressed("open_menu"):
-		_go_home.open(_going_home_faces())
+
 	_follow_player(delta)
 
 	sim.update(delta, player.position)

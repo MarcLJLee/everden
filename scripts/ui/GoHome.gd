@@ -18,6 +18,8 @@ const HANGUL_FONT := "res://fonts/Galmuri11.ttf"
 
 var _open := false
 var _leaving := false
+## 무엇을 데리고 가는지 물어볼 때 필드가 알려준다.
+var faces_provider := Callable()
 
 
 func _ready() -> void:
@@ -82,8 +84,19 @@ func is_open() -> bool:
 	return _open
 
 
+## ⚠️ **여는 키도 여기서 받는다.** 필드가 따로 폴링하면 같은 한 번의 누름을
+##    양쪽이 보게 되어 **열자마자 닫힌다.** 키 하나는 한 곳이 갖는다.
 func _unhandled_input(event: InputEvent) -> void:
-	if not _open or not event.is_pressed():
+	if not event.is_pressed():
+		return
+	if event.is_action_pressed("open_menu"):
+		if _open:
+			close()
+		elif faces_provider.is_valid():
+			open(faces_provider.call())
+		get_viewport().set_input_as_handled()
+		return
+	if not _open:
 		return
 	if event.is_action_pressed("ui_left") or event.is_action_pressed("ui_right"):
 		_leaving = not _leaving

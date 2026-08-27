@@ -7,7 +7,7 @@
 extends SceneTree
 
 ## 이 아래로 떨어지면 어딘가에서 판정이 조용히 끊긴 것이다.
-const FLOOR := 332
+const FLOOR := 338
 
 var _pass := 0
 var _fail := 0
@@ -502,7 +502,14 @@ func _test_boot() -> void:
 func _test_art_wiring(field) -> void:
 	var ground: Node2D = field.get_node("Ground")
 	var loaded: Dictionary = ground._sheets
-	_check("지형 4종이 모두 타일 그림을 갖는다", loaded.size() == 4, str(loaded.keys()))
+	for name in ["초원", "숲", "물가", "바위"]:
+		_check("지형 %s 에 타일 그림이 있다" % name, loaded.has(name), str(loaded.keys()))
+	# ★ **축척이 바뀌면 표현도 바뀐다** — 물가는 자리에 따라 다르게 그린다 (사용자 지적).
+	#   지형 이름을 늘리지 않는다. 늘리면 통행·서식지·생태 표가 전부 따라 늘어난다.
+	_check("물줄기 한가운데에 깔 물 그림이 있다", loaded.has("extra/water_0"))
+	_check("물과 뭍이 만나는 그림이 있다", loaded.has("extra/shore_N"))
+	_check("지형 이름은 넷 그대로다",
+		field.schema.terrain_walkable.size() == 4, str(field.schema.terrain_walkable.keys()))
 	_check("변형 개수가 이미지 폭에서 나온다",
 		ground._variants.get("초원", 0) == 6 and ground._variants.get("바위", 0) == 1,
 		str(ground._variants))

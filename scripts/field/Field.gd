@@ -181,6 +181,8 @@ func _spawn_player() -> void:
 			"eye_anchor": {"front": [16, 10], "side": [21, 10]},
 			"mouth_anchor": {"front": [16, 15], "side": [24, 14]},
 			"head_anchor": [16, 3],
+			# 플레이어만 4방향이다 — 동물은 측면 1방향 (BRIEF §4.5 ★ v3.16)
+			"facing": "four",
 		},
 	}
 	player = _make_actor(config)

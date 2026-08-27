@@ -6,6 +6,9 @@
 ## 여기서 잡는 것은 "구조가 사양대로인가" 뿐이다.
 extends SceneTree
 
+## 이 아래로 떨어지면 어딘가에서 판정이 조용히 끊긴 것이다.
+const FLOOR := 280
+
 var _pass := 0
 var _fail := 0
 
@@ -64,6 +67,11 @@ func _run() -> void:
 	await _test_puff(field)
 	await _test_invite(field)
 
+	# ⚠️ 판정 하나가 터지면 그 함수의 **나머지가 통째로 안 돈다.** 실패가 아니라
+	#    "조용히 사라짐" 이라 눈치채기 어렵다 — 이 프로젝트에서 다섯 번 겪었다.
+	#    그래서 **총 개수에 바닥을 둔다.** 판정을 지우려면 이 숫자도 같이 내려야 한다.
+	_check("판정이 중간에 끊기지 않았다", _pass + _fail >= FLOOR,
+		"%d 개 돌았다 (바닥 %d)" % [_pass + _fail, FLOOR])
 	print("")
 	print("=== 통과 %d / 실패 %d ===" % [_pass, _fail])
 	quit(0 if _fail == 0 else 1)
@@ -339,13 +347,13 @@ func _test_reveal(field) -> void:
 
 	field.guide.update([dog], [animal])
 	clues = field._apply_reveal()
-	_check("후각으로 잡으면 몸은 안 보이고 단서만 뜬다",
+	_check("후각으로 찾으면 몸은 안 보이고 단서만 뜬다",
 		not animal.actor.visible and clues.size() == 1 and clues[0]["sense"] == "후각",
 		"보임=%s 단서=%d" % [animal.actor.visible, clues.size()])
 
 	field.guide.update([cat], [animal])
 	clues = field._apply_reveal()
-	_check("시야로 잡으면 멀리서도 몸이 보인다", animal.actor.visible and clues.is_empty())
+	_check("시야로 찾으면 멀리서도 몸이 보인다", animal.actor.visible and clues.is_empty())
 
 	# 감각이 하나도 없어도 코앞이면 보인다
 	animal.position = field.player.position + Vector2(8, 0)
@@ -1331,6 +1339,45 @@ func _test_weather(field) -> void:
 	_check("청설모는 가", Josa.이가("청설모") == "청설모가")
 	_check("받침 있는 은", Josa.은는("고슴도치") == "고슴도치는")
 
+	# ★ **동물은 측면 1방향이다. 플레이어만 4방향.** (BRIEF §4.5 ★ v3.16)
+	#   방향은 곱셈이고 모션은 덧셈이다 — 예산을 방향이 아니라 모션에 쓴다.
+	_check("플레이어는 4방향이다", field.player.facing_set == "four")
+	var wild: Actor = _promoted(field, "squirrel")
+	_check("야생 동물은 측면 1방향이다", wild.facing_set == "side", wild.facing_set)
+	wild.move_vector = Vector2.UP
+	await process_frame
+	_check("측면 몸은 위로 가도 북향이 안 된다", wild.facing in ["east", "west"], wild.facing)
+	wild.move_vector = Vector2.DOWN
+	await process_frame
+	_check("아래로 가도 남향이 안 된다", wild.facing in ["east", "west"], wild.facing)
+	wild.move_vector = Vector2.ZERO
+	# 동료는 플레이어를 따라다니느라 세로로 걷는 시간이 길다 — 데이터가 4방향을 쓴다고 정한다
+	for companion in field.companions:
+		_check("동료 %s 는 4방향을 쓴다" % companion.species_id, companion.facing_set == "four")
+
+	# ⚠️ 측면 스프라이트가 수직으로 움직이면 미끄러져 보인다 — **AI 로 푼다** (도트 0장)
+	var straight_up := 0
+	var probe_rng := RandomNumberGenerator.new()
+	probe_rng.seed = 991
+	for i in 400:
+		var direction := Vector2.RIGHT.rotated(probe_rng.randf() * TAU)
+		var laid := FieldSim.sideways(direction)
+		if absf(laid.normalized().x) < FieldSim.SIDEWAYS - 0.001:
+			straight_up += 1
+		if not is_equal_approx(laid.length(), direction.length()):
+			straight_up += 1
+	_check("배회 방향에 수평 성분이 항상 있다", straight_up == 0, "%d/400 회" % straight_up)
+	_check("눕히면서 속도는 그대로 둔다",
+		is_equal_approx(FieldSim.sideways(Vector2(0, 3.0)).length(), 3.0))
+	_check("이미 옆으로 가는 방향은 안 건드린다",
+		FieldSim.sideways(Vector2(1, 0)) == Vector2(1, 0))
+	# 실제로 놓인 개체들도 그런가
+	var upright := 0
+	for animal in field.sim.animals:
+		if animal.velocity.length() > 0.01 and absf(animal.velocity.normalized().x) < 0.3:
+			upright += 1
+	_check("놓인 개체도 세로로만 가지 않는다", upright == 0, "%d 마리" % upright)
+
 	# ★ 실제 날씨는 튀지 않는다 — 지금과 가까운 상태로만 옮겨간다 (사용자 지적)
 	var walker := WeatherSystem.new()
 	walker.setup(schema, RandomNumberGenerator.new(), {"초원": 2000, "숲": 600})
@@ -1704,6 +1751,18 @@ func _find_terrain_point(field, terrain_name: String) -> Vector2:
 ##    ① 지금 시간대에 안 나와 있을 수 있다 → 세워서 준다
 ##    ② **지역 생태 때문에 이번 원정에 0 마리일 수 있다** (BRIEF §3.11) → 만들어서 준다
 ##    여기서 검사하는 것은 노출·교감이지 존재 규칙이 아니다 (그건 _test_presence 가 본다).
+## 노드까지 붙은 개체. `_find_animal` 은 **얕은 시뮬 상태로 돌려줄 수 있어서**
+## `.actor` 가 null 이다 — 거기서 터지면 그 뒤 판정이 통째로 안 돈다 (실제로 그랬다).
+func _promoted(field, id: String) -> Actor:
+	var animal := _find_animal(field, id)
+	if animal == null:
+		return null
+	if animal.actor == null:
+		animal.position = field.player.position + Vector2(24, 0)
+		field.sim.update(0.016, field.player.position)
+	return animal.actor
+
+
 func _find_animal(field, id: String) -> FieldSim.WildAnimal:
 	for animal in field.sim.animals:
 		if animal.species.get("id") == id and not animal.invited:

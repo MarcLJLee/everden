@@ -218,7 +218,8 @@ func _wander(animal: WildAnimal, delta: float, player_position: Vector2) -> void
 	if flee > 1.0:
 		var away := animal.position - player_position
 		if away.length() < flee * _tuning.tile_size and away.length() > 0.1:
-			animal.velocity = away.normalized() * _tuning.wild_speed * _tuning.tile_size * animal.move_scale
+			animal.velocity = sideways(away.normalized()) \
+				* _tuning.wild_speed * _tuning.tile_size * animal.move_scale
 	var stepped := animal.position + animal.velocity * delta
 	# 수영 안 하는 동물이 호수를 가로지르지 않는다. 갈 수 있는 곳은 habitat 이 정한다.
 	var settled := _terrain.slide(animal.position, stepped, _schema,
@@ -315,9 +316,29 @@ func _roll_speed(species: Dictionary) -> float:
 	return _rng.randf_range(float(span[0]), float(span[1]))
 
 
+## ⚠️ **측면 스프라이트가 수직으로 움직이면 미끄러져 보인다.** (BRIEF §4.5 ★ v3.16)
+##    도트로 풀면 종당 6장이 든다 — **AI 로 푼다.** 배회 목표에 수평 성분이 항상 있게.
+##    도트 0장이고, 덤으로 동물이 곧게 안 걸어서 더 동물처럼 보인다.
+const SIDEWAYS := 0.55
+
 func _random_velocity() -> Vector2:
 	var speed := _tuning.wild_speed * _tuning.tile_size
-	return Vector2.RIGHT.rotated(_rng.randf_range(0.0, TAU)) * speed * _rng.randf_range(0.4, 1.0)
+	return sideways(Vector2.RIGHT.rotated(_rng.randf_range(0.0, TAU))) \
+		* speed * _rng.randf_range(0.4, 1.0)
+
+
+## 방향에 수평 성분을 남긴다. 세로로만 가는 목표를 비스듬히 눕힌다.
+static func sideways(direction: Vector2) -> Vector2:
+	if direction.length() < 0.001:
+		return direction
+	var unit := direction.normalized()
+	if absf(unit.x) >= SIDEWAYS:
+		return direction
+	var toward: float = 1.0 if unit.x >= 0.0 else -1.0
+	# x 는 최소치까지 밀고 y 는 남은 길이만큼 — 방향만 눕히고 속도는 그대로 둔다
+	var lifted := Vector2(toward * SIDEWAYS,
+		(1.0 if unit.y >= 0.0 else -1.0) * sqrt(1.0 - SIDEWAYS * SIDEWAYS))
+	return lifted * direction.length()
 
 
 func _random_point_away_from(origin: Vector2, min_distance: float) -> Vector2:

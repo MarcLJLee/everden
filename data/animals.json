@@ -3,7 +3,8 @@
     "종(class) 정의. 개체(instance)가 아니다. — BRIEF §5.3",
     "시작 지역: 집 근처의 뒷산과 냇가 (한국 중부 산·하천 생태, 지명은 무명) — BRIEF §3.8",
     "size_class는 임포터가 size.adult에서 파생 계산한 값이다. 참고용으로 적어두었다.",
-    "prototype: true 인 5종이 데모 런타임의 대상이다 — BRIEF §8"
+    "prototype: true 인 5종이 데모 런타임의 대상이다 — BRIEF §8",
+    "★ sprite_set.facing 은 몸이 몇 방향을 쓰는가다 (BRIEF §4.5 v3.16). 기본은 side — 방향은 곱셈이고 모션은 덧셈이라 예산을 모션에 쓴다. 동료로 데려가는 개·고양이만 four 다: 플레이어를 따라다니느라 세로로 걷는 시간이 길어서 측면 그림이면 미끄러져 보인다. 4방향 도트는 이미 있으니 새로 드는 장수는 0이다."
   ],
   "requires_behavior_schema": 1,
   "region": {
@@ -126,7 +127,8 @@
           2
         ],
         "animation_rig": "quadruped",
-        "anchors_verified": "sprites/ 의 실제 도트에서 확인함"
+        "anchors_verified": "sprites/ 의 실제 도트에서 확인함",
+        "facing": "four"
       }
     },
     {
@@ -251,7 +253,8 @@
           16,
           2
         ],
-        "anchors_verified": "주둥이가 짧아 눈이 앞에 붙는다 — 개는 눈 뒤로 주둥이가 3px 더 나가고 고양이는 거의 안 나간다"
+        "anchors_verified": "주둥이가 짧아 눈이 앞에 붙는다 — 개는 눈 뒤로 주둥이가 3px 더 나가고 고양이는 거의 안 나간다",
+        "facing": "four"
       }
     },
     {

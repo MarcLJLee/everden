@@ -64,7 +64,8 @@ func _ready() -> void:
 		"id": "player", "name": "나", "diet": "잡식", "activity": "주행성",
 		"size_class": "중", "senses": [], "traits": [],
 		"stats_range": {"sense_range": [1.0, 1.0], "charm": [1.0, 1.0]},
-		"sprite_set": {"eye_style": "round", "head_anchor": [16, 3]},
+		# 플레이어만 4방향이다 — 동물은 측면 1방향 (BRIEF §4.5 ★ v3.16)
+		"sprite_set": {"eye_style": "round", "head_anchor": [16, 3], "facing": "four"},
 	}, Vector2(300, 200), view)
 	player.speed_tiles = view.move_speed
 

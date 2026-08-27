@@ -199,7 +199,7 @@ func _spawn_player(view: FieldTuning) -> void:
 		"size_class": "중", "senses": [], "traits": [],
 		"stats_range": {"sense_range": [1.0, 1.0], "charm": [1.0, 1.0]},
 		# 플레이어만 4방향이다 — 동물은 측면 1방향 (BRIEF §4.5 ★ v3.16)
-		"sprite_set": {"eye_style": "round", "head_anchor": [16, 3], "facing": "four"},
+		"sprite_set": {"eye_style": "player", "head_anchor": [16, 1], "facing": "four"},
 	}
 	player = load(ACTOR_SCENE).instantiate()
 	_actors.add_child(player)

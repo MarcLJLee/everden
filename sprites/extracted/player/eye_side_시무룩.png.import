@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://fwcxlyx40oly"
-path="res://.godot/imported/eye_front_기쁨.png-1db022477e5b8c934966f6bbe88071f0.ctex"
+uid="uid://septbmyaqf07"
+path="res://.godot/imported/eye_side_시무룩.png-80fe76def590d81d9582eb4b1065e1a8.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://sprites/extracted/player/eye_front_기쁨.png"
-dest_files=["res://.godot/imported/eye_front_기쁨.png-1db022477e5b8c934966f6bbe88071f0.ctex"]
+source_file="res://sprites/extracted/player/eye_side_시무룩.png"
+dest_files=["res://.godot/imported/eye_side_시무룩.png-80fe76def590d81d9582eb4b1065e1a8.ctex"]
 
 [params]
 

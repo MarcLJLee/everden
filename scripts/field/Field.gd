@@ -200,9 +200,7 @@ func _spawn_player() -> void:
 		"size_class": "중", "senses": [], "traits": [],
 		"stats_range": {"sense_range": [1.0, 1.0], "charm": [1.0, 1.0]},
 		"sprite_set": {
-			"eye_style": "round", "mouth_style": "small",
-			"eye_anchor": {"front": [16, 10], "side": [21, 10]},
-			"mouth_anchor": {"front": [16, 15], "side": [24, 14]},
+			"eye_style": "player", "mouth_style": "small",
 			"head_anchor": [16, 3],
 			# 플레이어만 4방향이다 — 동물은 측면 1방향 (BRIEF §4.5 ★ v3.16)
 			"facing": "four",

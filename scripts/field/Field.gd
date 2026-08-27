@@ -82,7 +82,7 @@ func _ready() -> void:
 	_camera.limit_bottom = int(_bounds.size.y)
 
 	guide.setup(schema, tuning, terrain)
-	gauge.setup(tuning)
+	gauge.setup(tuning, schema)
 
 	_spawn_player()
 	_spawn_companions(result.species)

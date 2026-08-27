@@ -43,6 +43,11 @@ var traits: Array = []
 ## 개체값 — 능력치가 무언가를 결정해야 한다 (BRIEF §2.5)
 var sense_scale := 1.0
 var charm := 1.0
+## 이 개체의 이동속도 배율. 종마다 범위가 다르고 개체마다 그 안에서 다르다 —
+## 두꺼비는 느리고 참새는 빠르다. **숫자로 보여주지 않는다. 걷는 걸 보면 안다.**
+var move_scale := 1.0
+## 이 개체의 개성. 선택지는 종 데이터(quirk_pool)가 갖는다. 없을 수도 있다.
+var quirks: Array = []
 
 var facing := "south"
 var canvas := Vector2i(32, 32)
@@ -80,6 +85,9 @@ func setup(config: Dictionary, schema: TagSchema, tuning: FieldTuning, rng: Rand
 	var stats: Dictionary = config.get("stats_range", {})
 	sense_scale = _roll(stats.get("sense_range", [1.0, 1.0]), rng)
 	charm = _roll(stats.get("charm", [1.0, 1.0]), rng)
+	quirks = roll_quirks(config, schema, rng)
+	move_scale = _roll(stats.get("move_speed", [1.0, 1.0]), rng) \
+		* schema.quirk_product(quirks, "move_scale")
 
 	var sprite_set: Dictionary = SpriteLibrary.apply_meta_anchors(
 		species_id, config.get("sprite_set", {}))
@@ -111,7 +119,7 @@ func _process(delta: float) -> void:
 		return
 	_moving = move_vector.length() > 0.05
 	if _moving:
-		var step := move_vector.normalized() * speed_tiles * _tuning.tile_size * delta
+		var step := move_vector.normalized() * speed_tiles * move_scale * _tuning.tile_size * delta
 		var came_from := position
 		position += step
 		if confine.is_valid():
@@ -179,6 +187,19 @@ func hide_sense_icon() -> void:
 ## 게이지·이펙트를 띄울 머리 위 월드 좌표
 func head_position() -> Vector2:
 	return position + Vector2(0, canvas_offset.y - 6)
+
+## 종이 내건 선택지에서 개성을 뽑는다. 코드가 개성 이름을 고르지 않는다.
+static func roll_quirks(config: Dictionary, schema: TagSchema, rng: RandomNumberGenerator) -> Array:
+	var pool: Array = config.get("quirk_pool", []).duplicate()
+	var span: Array = config.get("quirk_count", [0, 0])
+	if pool.is_empty() or span.size() < 2:
+		return []
+	var count := rng.randi_range(int(span[0]), mini(int(span[1]), pool.size()))
+	var picked: Array = []
+	for i in count:
+		picked.append(pool.pop_at(rng.randi_range(0, pool.size() - 1)))
+	return picked
+
 
 static func _roll(range_array, rng: RandomNumberGenerator) -> float:
 	if typeof(range_array) != TYPE_ARRAY or range_array.size() < 2:

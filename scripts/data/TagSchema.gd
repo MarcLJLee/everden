@@ -12,7 +12,8 @@ var sense_profile: Dictionary = {}
 var eyeshine: Dictionary = {}
 var terrain_walkable: Dictionary = {}   ## 지형 -> 플레이어가 밟을 수 있는가
 var weather: Dictionary = {}            ## 날씨 -> {sense_scale, shows}
-var activity_presence: Dictionary = {}  ## activity -> {시간대: 나와 있을 확률}           ## activity -> 눈이 빛나 보이는 시간대 목록      ## sense -> {reveals, range_scale, daypart_scale, terrain_scale}
+var activity_presence: Dictionary = {}  ## activity -> {시간대: 나와 있을 확률}
+var quirks: Dictionary = {}             ## 개성 이름 -> {move_scale, gauge_scale, flee_tiles, shows}           ## activity -> 눈이 빛나 보이는 시간대 목록      ## sense -> {reveals, range_scale, daypart_scale, terrain_scale}
 var emote_icons: Dictionary = {}
 var expression_set: Dictionary = {}
 var derivations: Dictionary = {}
@@ -30,6 +31,7 @@ static func from_dict(raw: Dictionary) -> TagSchema:
 	s.terrain_walkable = _strip_comments(raw.get("terrain_walkable", {}))
 	s.weather = _strip_comments(raw.get("weather", {}))
 	s.activity_presence = _strip_comments(raw.get("activity_presence", {}))
+	s.quirks = _strip_comments(raw.get("quirks", {}))
 	s.emote_icons = _strip_comments(raw.get("emote_icons", {}))
 	s.expression_set = _strip_comments(raw.get("expression_set", {}))
 	s.derivations = _strip_comments(raw.get("derivations", {}))
@@ -128,6 +130,27 @@ func dayparts() -> Array:
 	for activity in activity_presence:
 		return activity_presence[activity].keys()
 	return []
+
+
+## 개성이 무엇을 바꾸는가. 없는 개성이면 아무것도 안 바꾼다.
+func quirk_effect(quirk: String, key: String, fallback := 1.0) -> float:
+	return float(quirks.get(quirk, {}).get(key, fallback))
+
+
+func quirk_shows(quirk: String) -> String:
+	return String(quirks.get(quirk, {}).get("shows", ""))
+
+
+func quirk_names() -> Array:
+	return quirks.keys()
+
+
+## 개성 목록을 하나의 배율로 합친다. 여러 개면 곱한다.
+func quirk_product(names: Array, key: String) -> float:
+	var value := 1.0
+	for name in names:
+		value *= quirk_effect(String(name), key, 1.0)
+	return value
 
 
 func known_senses() -> Array:

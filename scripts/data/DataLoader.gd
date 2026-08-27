@@ -142,6 +142,19 @@ static func _validate_species(species: Dictionary, schema: TagSchema, result: Re
 		result.warn("%s.sprite_set.%s = '%s' 는 모르는 값입니다 → '%s' 로 대체했습니다"
 			% [id, field, value, fallback])
 
+	# 개성 — 선택지는 종이 갖되, 이름은 tags.json 의 어휘여야 한다
+	for quirk in species.get("quirk_pool", []):
+		if not schema.quirks.has(String(quirk)):
+			result.error("%s.quirk_pool 의 '%s' 는 tags.json 의 quirks 에 없습니다 (가능: %s)"
+				% [id, quirk, ", ".join(PackedStringArray(schema.quirk_names()))])
+	var count: Array = species.get("quirk_count", [])
+	if count.size() == 2:
+		if int(count[0]) < 0 or int(count[1]) < int(count[0]):
+			result.error("%s.quirk_count = %s 가 이상합니다 (최소, 최대)" % [id, count])
+		if int(count[1]) > species.get("quirk_pool", []).size():
+			result.warn("%s.quirk_count 최대 %d 가 quirk_pool(%d개)보다 큽니다 — 풀만큼만 나옵니다"
+				% [id, int(count[1]), species.get("quirk_pool", []).size()])
+
 	# presence — 종이 활동 조건을 직접 들 수 있다. 키와 범위를 본다.
 	for daypart in species.get("presence", {}):
 		var known := schema.dayparts()

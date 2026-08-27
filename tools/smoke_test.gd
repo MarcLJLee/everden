@@ -44,6 +44,7 @@ func _run() -> void:
 	await _test_terrain_walk(field)
 	await _test_weather(field)
 	await _test_presence(field)
+	await _test_individuals(field)
 	await _test_eyeshine(field)
 	await _test_puff(field)
 	await _test_invite(field)
@@ -703,6 +704,61 @@ func _test_presence(field) -> void:
 		field.sim.count_present() < field.sim.animals.size())
 
 	field._apply_daypart("낮")
+	await process_frame
+
+
+## ★ 개체의 개성 — 능력치가 무언가를 결정하고, 숫자가 아니라 보이는 것으로 (BRIEF §2.5)
+func _test_individuals(field) -> void:
+	var schema: TagSchema = field.schema
+	var all := DataLoader.load_all(false).species
+
+	# 종마다 이동속도가 다르다 — 두꺼비는 느리고 참새는 빠르다
+	var toad: Array = all["toad"]["stats_range"]["move_speed"]
+	var sparrow: Array = all["sparrow"]["stats_range"]["move_speed"]
+	_check("종마다 이동속도 범위가 다르다", float(toad[1]) < float(sparrow[0]),
+		"두꺼비 %s vs 참새 %s" % [toad, sparrow])
+
+	# 같은 종 안에서도 개체가 다르다
+	var seen := {}
+	for animal in field.sim.animals:
+		if String(animal.species.get("id", "")) == "squirrel":
+			seen[snappedf(animal.move_scale, 0.01)] = true
+	_check("같은 종 안에서도 개체마다 속도가 다르다", seen.size() >= 2, str(seen.keys()))
+
+	# ★ 선택지는 종 데이터가 갖는다. 코드가 개성 이름을 고르지 않는다.
+	var outside := PackedStringArray()
+	var too_many := PackedStringArray()
+	for animal in field.sim.animals:
+		var pool: Array = animal.species.get("quirk_pool", [])
+		var span: Array = animal.species.get("quirk_count", [0, 0])
+		for quirk in animal.quirks:
+			if not (String(quirk) in pool):
+				outside.append("%s:%s" % [animal.species.get("id"), quirk])
+		if span.size() == 2 and animal.quirks.size() > int(span[1]):
+			too_many.append(String(animal.species.get("id")))
+	_check("개성은 그 종의 quirk_pool 에서만 나온다", outside.is_empty(), ", ".join(outside))
+	_check("개성 개수가 quirk_count 를 넘지 않는다", too_many.is_empty(), ", ".join(too_many))
+
+	# 옵셔널이다 — 아무 개성 없는 개체가 나올 수 있어야 한다
+	_check("개성이 없는 개체도 나올 수 있다",
+		int(all["dog"]["quirk_count"][0]) == 0)
+
+	# 전부 화면에서 보이는 것이어야 한다 (원칙 5)
+	var invisible := PackedStringArray()
+	for quirk in schema.quirk_names():
+		if schema.quirk_shows(String(quirk)).is_empty():
+			invisible.append(String(quirk))
+	_check("모든 개성이 화면에서 무엇으로 보이는지 적혀 있다", invisible.is_empty(),
+		", ".join(invisible))
+
+	# 붙임성이 게이지를 눈에 띄게 줄인다
+	var dog: Actor = _find_companion(field, "dog")
+	dog.charm = 1.0
+	var plain: Dictionary = Gauge.compute_factor(all["squirrel"], dog, "낮", field.tuning, [], schema)
+	var friendly: Dictionary = Gauge.compute_factor(all["squirrel"], dog, "낮", field.tuning,
+		["붙임성"], schema)
+	_check("붙임성 개체는 게이지가 짧다", friendly["factor"] < plain["factor"] * 0.8,
+		"%.2f → %.2f" % [plain["factor"], friendly["factor"]])
 	await process_frame
 
 

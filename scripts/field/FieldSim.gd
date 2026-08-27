@@ -21,6 +21,10 @@ class WildAnimal extends RefCounted:
 	var present := true
 	## 개체마다 한 번 굴린 값. 시간대가 바뀔 때 이 값으로 다시 판정한다.
 	var presence_roll := 0.0
+	## 이 개체의 이동속도 배율과 개성. 승격 전(얕은 시뮬)에도 걸려야
+	## 멀리서 보던 놈이 가까이 왔을 때 갑자기 빨라지지 않는다.
+	var move_scale := 1.0
+	var quirks: Array = []
 
 	func is_active() -> bool:
 		return actor != null
@@ -66,6 +70,9 @@ func spawn(target_species: Array, player_position: Vector2) -> void:
 			animal.velocity = _random_velocity()
 			animal.turn_timer = _rng.randf_range(1.0, 4.0)
 			animal.presence_roll = _rng.randf()
+			animal.quirks = Actor.roll_quirks(species, _schema, _rng)
+			animal.move_scale = _roll_speed(species) * _schema.quirk_product(animal.quirks, "move_scale")
+			animal.velocity *= animal.move_scale
 			animals.append(animal)
 
 
@@ -83,7 +90,7 @@ func update(delta: float, player_position: Vector2) -> void:
 	for animal in animals:
 		if animal.invited or not animal.present:
 			continue
-		_wander(animal, delta)
+		_wander(animal, delta, player_position)
 		var distance := animal.position.distance_to(player_position)
 		if distance <= activation_px and not animal.is_active():
 			_promote(animal)
@@ -95,11 +102,18 @@ func update(delta: float, player_position: Vector2) -> void:
 
 
 ## 얕은 시뮬 — 랜덤 워크. 정교한 AI는 필요 없다.
-func _wander(animal: WildAnimal, delta: float) -> void:
+func _wander(animal: WildAnimal, delta: float, player_position: Vector2) -> void:
 	animal.turn_timer -= delta
 	if animal.turn_timer <= 0.0:
-		animal.velocity = _random_velocity()
+		animal.velocity = _random_velocity() * animal.move_scale
 		animal.turn_timer = _rng.randf_range(1.5, 4.5)
+
+	# 수줍은 개체는 가까이 가면 물러선다. 개성이 화면에서 보이는 자리다 (BRIEF §2.5).
+	var flee := _schema.quirk_product(animal.quirks, "flee_tiles") if not animal.quirks.is_empty() else 1.0
+	if flee > 1.0:
+		var away := animal.position - player_position
+		if away.length() < flee * _tuning.tile_size and away.length() > 0.1:
+			animal.velocity = away.normalized() * _tuning.wild_speed * _tuning.tile_size * animal.move_scale
 	var stepped := animal.position + animal.velocity * delta
 	# 수영 안 하는 동물이 호수를 가로지르지 않는다. 갈 수 있는 곳은 habitat 이 정한다.
 	var settled := _terrain.slide(animal.position, stepped, _schema,
@@ -121,6 +135,9 @@ func _promote(animal: WildAnimal) -> void:
 	var actor: Actor = _actor_scene.instantiate()
 	_root.add_child(actor)
 	actor.setup(animal.species, _schema, _tuning, _rng)
+	# 개체값은 이미 굴려뒀다. 다시 굴리면 멀리서 보던 놈이 가까이 오며 딴 놈이 된다.
+	actor.quirks = animal.quirks
+	actor.move_scale = animal.move_scale
 	actor.position = animal.position
 	actor.bounds = _bounds
 	actor.speed_tiles = 0.0  # 위치는 FieldSim 이 직접 준다. Actor 는 방향·연출만 맡는다
@@ -184,6 +201,13 @@ func count_shallow() -> int:
 		if not animal.is_active() and animal.present and not animal.invited:
 			total += 1
 	return total
+
+
+func _roll_speed(species: Dictionary) -> float:
+	var span: Array = species.get("stats_range", {}).get("move_speed", [1.0, 1.0])
+	if span.size() < 2:
+		return 1.0
+	return _rng.randf_range(float(span[0]), float(span[1]))
 
 
 func _random_velocity() -> Vector2:

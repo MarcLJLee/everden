@@ -15,9 +15,11 @@ var target: FieldSim.WildAnimal = null
 var lead: Actor = null
 
 var _tuning: FieldTuning = null
+var _schema: TagSchema = null
 
-func setup(tuning: FieldTuning) -> void:
+func setup(tuning: FieldTuning, schema: TagSchema = null) -> void:
 	_tuning = tuning
+	_schema = schema
 
 
 func start(animal: FieldSim.WildAnimal, companion: Actor, daypart: String) -> void:
@@ -25,7 +27,7 @@ func start(animal: FieldSim.WildAnimal, companion: Actor, daypart: String) -> vo
 		return
 	target = animal
 	lead = companion
-	var computed := compute_factor(animal.species, companion, daypart, _tuning)
+	var computed := compute_factor(animal.species, companion, daypart, _tuning, animal.quirks, _schema)
 	factor = computed["factor"]
 	reasons = computed["reasons"]
 	duration = _tuning.base_gauge_time * factor
@@ -56,7 +58,7 @@ func cancel() -> void:
 
 ## 상성 계수. 프로토타입에서 켜는 축은 먹이 유형 + 활동 시간 2개뿐이다. (BRIEF §8)
 static func compute_factor(species: Dictionary, companion: Actor, daypart: String,
-		tuning: FieldTuning) -> Dictionary:
+		tuning: FieldTuning, target_quirks: Array = [], schema: TagSchema = null) -> Dictionary:
 	var factor := 1.0
 	var reasons := PackedStringArray()
 
@@ -73,6 +75,13 @@ static func compute_factor(species: Dictionary, companion: Actor, daypart: Strin
 	if not activity_matches(String(species.get("activity", "")), daypart):
 		factor *= tuning.mismatch_factor
 		reasons.append("시간대 ×%.2f" % tuning.mismatch_factor)
+
+	# 개체의 개성 — 붙임성이 있으면 게이지가 눈에 띄게 짧다 (BRIEF §2.5)
+	if schema != null and not target_quirks.is_empty():
+		var quirk_scale := schema.quirk_product(target_quirks, "gauge_scale")
+		if not is_equal_approx(quirk_scale, 1.0):
+			factor *= quirk_scale
+			reasons.append("개성 ×%.2f" % quirk_scale)
 
 	if reasons.is_empty():
 		reasons.append("상성 맞음")

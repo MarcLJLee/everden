@@ -43,6 +43,14 @@ var traits: Array = []
 ## 개체의 성별. 개체 정의 때 정해진다 (BRIEF §3.11 1단계) — 원정 중에 바뀌지 않는다.
 ## 화면에서 보인다: 이형이 있는 종은 도트로, 없는 종은 이름표 뱃지로. (§4.9)
 var sex := ""
+## 몸이 몇 방향을 쓰는가 — "side" 면 좌우 둘, "four" 면 네 방향. (BRIEF §4.5 ★ v3.16)
+##
+## ★ **방향은 곱셈이고 모션은 덧셈이다.** 3방향이면 새 모션 하나가 종당 6장,
+##   측면이면 2장이다. 그래서 예산을 방향이 아니라 모션에 쓴다 —
+##   같은 16장으로 먹기·자기·놀기·기뻐하기를 산다.
+## ★ 개·고양이·다람쥐의 4방향 도트를 **버리지는 않는다.** 본체는 능력을 갖고
+##   얼마나 쓸지는 데이터(`sprite_set.facing`)가 정한다. 지금 four 는 플레이어뿐이다.
+var facing_set := "side"
 ## 개체값 — 능력치가 무언가를 결정해야 한다 (BRIEF §2.5)
 var sense_scale := 1.0
 var charm := 1.0
@@ -70,6 +78,24 @@ static func roll_sex(rng: RandomNumberGenerator) -> String:
 	return "male" if rng.randf() < 0.5 else "female"
 
 
+## 단계와 나이 하나. 표(`growth`)에 있는 단계만 쓴다 — 종 이름으로 분기하지 않는다.
+##
+## ★ 야생 개체의 나이는 **게임적 허용으로 닫는다** (BRIEF §3.15). 근거를 만들지 않는다 —
+##   아이가 분명히 궁금해하기 때문에 답을 주는 것이다: "얘는 엄마 사슴인가? 아기인가?"
+## ★ 아기가 드물어야 만났을 때 사건이 된다. 다섯에 하나쯤.
+static func roll_stage(species: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
+	var stages: Array = species.get("growth", [])
+	var baby := ""
+	for one in stages:
+		if String(one.get("stage", "")) == "baby":
+			baby = "baby"
+	if not baby.is_empty() and rng.randf() < 0.2:
+		return {"stage": "baby", "age_years": 0}
+	var span: Array = species.get("adult_age_years", [1, 5])
+	return {"stage": "adult",
+		"age_years": rng.randi_range(int(span[0]), int(span[1]))}
+
+
 ## 마릿수만큼 성별을 뽑되, **둘 이상이면 암수가 반드시 섞인다.**
 ## 짝이 없다는 이유로 영구히 막히는 일을 구조적으로 없앤다 (BRIEF §2.4 확정 배치).
 ## `required` 를 주면 그 성별이 반드시 하나 들어간다 — 집에 혼자인 개체가 있을 때 쓴다.
@@ -94,6 +120,7 @@ func setup(config: Dictionary, schema: TagSchema, tuning: FieldTuning,
 	_emote = get_node("Body/Emote")
 
 	species = config
+	facing_set = String((config.get("sprite_set", {}) as Dictionary).get("facing", "side"))
 	sex = individual_sex if not individual_sex.is_empty() else roll_sex(rng)
 	_tuning = tuning
 	species_id = String(config.get("id", ""))
@@ -166,6 +193,9 @@ func _process(delta: float) -> void:
 func _facing_from(vector: Vector2) -> String:
 	if absf(vector.x) >= absf(vector.y):
 		return "east" if vector.x >= 0.0 else "west"
+	# 측면 1방향인 몸은 북·남을 쓰지 않는다 — 그 그림이 없다 (§4.5)
+	if facing_set != "four":
+		return "east" if _last_horizontal == "east" else "west"
 	return "south" if vector.y >= 0.0 else "north"
 
 

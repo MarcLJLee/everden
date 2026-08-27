@@ -27,6 +27,11 @@ class WildAnimal extends RefCounted:
 	var quirks: Array = []
 	## 개체의 성별. 정의 때 한 번 정해지고 원정 내내 바뀌지 않는다. (BRIEF §3.11 1단계)
 	var sex := ""
+	## 단계("baby"/"adult")와 나이(살). 성별과 같이 **정의 때** 정해진다 (§3.15).
+	## ★ 아이가 묻는 것은 숫자가 아니라 **관계**다 — "얘는 엄마 사슴인가, 아기인가?"
+	##   그래서 카드의 주인공은 성별 + 단계고 숫자 나이는 곁들이다.
+	var stage := "adult"
+	var age_years := 1
 	## 이 개체에 쏟은 점유 시간 (0~1). **게이지가 아니라 개체가 들고 있다** —
 	## 다른 데 갔다 와도 이어서 찰 수 있어야 한다. 한 번 쏟은 시간은 사라지지 않는다.
 	var invite_progress := 0.0
@@ -97,6 +102,9 @@ func spawn(target_species: Array, player_position: Vector2) -> void:
 			var animal := WildAnimal.new()
 			animal.species = species
 			animal.sex = String(sexes[i])
+			var grown := Actor.roll_stage(species, _rng)
+			animal.stage = String(grown["stage"])
+			animal.age_years = int(grown["age_years"])
 			animal.position = _spawn_point(species, player_position, min_distance)
 			animal.velocity = _random_velocity()
 			animal.turn_timer = _rng.randf_range(1.0, 4.0)
@@ -187,7 +195,11 @@ func _spawn_point(species: Dictionary, player_position: Vector2, min_distance: f
 			var point := _terrain.random_point_in(species.get("habitat", []), _rng)
 			if point != Vector2.ZERO and point.distance_to(player_position) >= min_distance:
 				return point
-	return _random_point_away_from(player_position, min_distance)
+	# ⚠️ 못 찾았으면 아무 데나 두지 않는다 — 살 수 없는 지형에 놓이면 그대로 갇힌다.
+	var fallback := _random_point_away_from(player_position, min_distance)
+	if _terrain == null:
+		return fallback
+	return _terrain.nearest_standing(fallback, _schema, species.get("habitat", []))
 
 
 func update(delta: float, player_position: Vector2) -> void:
@@ -210,7 +222,7 @@ func update(delta: float, player_position: Vector2) -> void:
 func _wander(animal: WildAnimal, delta: float, player_position: Vector2) -> void:
 	animal.turn_timer -= delta
 	if animal.turn_timer <= 0.0:
-		animal.velocity = _random_velocity() * animal.move_scale
+		animal.velocity = _bankward(animal) * animal.move_scale
 		animal.turn_timer = _rng.randf_range(1.5, 4.5)
 
 	# 수줍은 개체는 가까이 가면 물러선다. 개성이 화면에서 보이는 자리다 (BRIEF §2.5).
@@ -218,7 +230,8 @@ func _wander(animal: WildAnimal, delta: float, player_position: Vector2) -> void
 	if flee > 1.0:
 		var away := animal.position - player_position
 		if away.length() < flee * _tuning.tile_size and away.length() > 0.1:
-			animal.velocity = away.normalized() * _tuning.wild_speed * _tuning.tile_size * animal.move_scale
+			animal.velocity = sideways(away.normalized()) \
+				* _tuning.wild_speed * _tuning.tile_size * animal.move_scale
 	var stepped := animal.position + animal.velocity * delta
 	# 수영 안 하는 동물이 호수를 가로지르지 않는다. 갈 수 있는 곳은 habitat 이 정한다.
 	var settled := _terrain.slide(animal.position, stepped, _schema,
@@ -288,6 +301,16 @@ func count_present() -> int:
 	return total
 
 
+## 지금 이 필드에 나와 있는 개체 전부. 노드가 붙었는지는 안 본다 —
+## 단서와 유도는 **몸이 아니라 자리**에서 나온다.
+func present_animals() -> Array[WildAnimal]:
+	var out: Array[WildAnimal] = []
+	for animal in animals:
+		if animal.present and not animal.invited:
+			out.append(animal)
+	return out
+
+
 func active_animals() -> Array[WildAnimal]:
 	var out: Array[WildAnimal] = []
 	for animal in animals:
@@ -315,9 +338,59 @@ func _roll_speed(species: Dictionary) -> float:
 	return _rng.randf_range(float(span[0]), float(span[1]))
 
 
+## ⚠️ **측면 스프라이트가 수직으로 움직이면 미끄러져 보인다.** (BRIEF §4.5 ★ v3.16)
+##    도트로 풀면 종당 6장이 든다 — **AI 로 푼다.** 배회 목표에 수평 성분이 항상 있게.
+##    도트 0장이고, 덤으로 동물이 곧게 안 걸어서 더 동물처럼 보인다.
+const SIDEWAYS := 0.55
+
 func _random_velocity() -> Vector2:
 	var speed := _tuning.wild_speed * _tuning.tile_size
-	return Vector2.RIGHT.rotated(_rng.randf_range(0.0, TAU)) * speed * _rng.randf_range(0.4, 1.0)
+	return sideways(Vector2.RIGHT.rotated(_rng.randf_range(0.0, TAU))) \
+		* speed * _rng.randf_range(0.4, 1.0)
+
+
+## ★ **물 한가운데 있는 동물은 물가로 나온다.** (원칙 2)
+##
+##   막힌 지형(물·바위)에 사는 동물이 그 한가운데를 계속 배회하면 **영영 다가갈 수 없다** —
+##   재보니 수달 하나가 60초 내내 그랬다. 그건 되돌릴 수 없는 벽이다.
+##   물줄기를 좁히면 도랑이 되므로 **AI 로 푼다**: 밟을 수 있는 땅이 초대 반경 안에
+##   없으면 배회 목표를 뭍 쪽으로 돌린다. 도트 0장이고, 수달은 원래 물가로 나온다.
+##
+##   ⚠️ 물 밖으로 **내보내는 게 아니다.** 서식지는 그대로 지킨다(slide 가 막는다) —
+##      물가 쪽으로 향하게만 한다.
+func _bankward(animal: WildAnimal) -> Vector2:
+	var wander := _random_velocity()
+	if _terrain == null or _schema == null:
+		return wander
+	var reach := _tuning.interact_radius * _tuning.tile_size
+	var toward := Vector2.ZERO
+	var far := true
+	# 둘레를 훑어 밟을 수 있는 땅을 찾는다. 가까우면 그냥 놀게 둔다.
+	for step in 12:
+		var way := Vector2.RIGHT.rotated(TAU * float(step) / 12.0)
+		if _terrain.can_stand(animal.position + way * reach, _schema, []):
+			far = false
+			break
+		if toward == Vector2.ZERO and _terrain.can_stand(
+				animal.position + way * reach * 3.0, _schema, []):
+			toward = way
+	if far and toward != Vector2.ZERO:
+		return sideways(toward) * _tuning.wild_speed * _tuning.tile_size
+	return wander
+
+
+## 방향에 수평 성분을 남긴다. 세로로만 가는 목표를 비스듬히 눕힌다.
+static func sideways(direction: Vector2) -> Vector2:
+	if direction.length() < 0.001:
+		return direction
+	var unit := direction.normalized()
+	if absf(unit.x) >= SIDEWAYS:
+		return direction
+	var toward: float = 1.0 if unit.x >= 0.0 else -1.0
+	# x 는 최소치까지 밀고 y 는 남은 길이만큼 — 방향만 눕히고 속도는 그대로 둔다
+	var lifted := Vector2(toward * SIDEWAYS,
+		(1.0 if unit.y >= 0.0 else -1.0) * sqrt(1.0 - SIDEWAYS * SIDEWAYS))
+	return lifted * direction.length()
 
 
 func _random_point_away_from(origin: Vector2, min_distance: float) -> Vector2:

@@ -12,6 +12,7 @@ const DATA_PATH := "res://sprites/extracted/ui/title.json"
 const ART_ROOT := "res://sprites/extracted/"
 ## 타이틀에서 고르면 **필드가 아니라 집으로 들어온다.** (BRIEF §2.7)
 const HOME_SCENE := "res://scenes/home/Home.tscn"
+const FIRST_SCENE := "res://scenes/ui/FirstMeeting.tscn"
 const FIELD_SCENE := "res://scenes/field/Field.tscn"
 const TUNING_PATH := "res://tuning/field_tuning.tres"
 const ACTOR_SCENE := "res://scenes/actors/Actor.tscn"
@@ -254,7 +255,10 @@ func _point(at) -> Vector2:
 ## 세이브는 아직 없으므로 지금은 언제나 첫 실행이다.
 func _build_menu() -> void:
 	var menu: Dictionary = data.get("menu", {})
-	_items = menu.get("items_first_run", ["NEW GAME", "EXIT"]).duplicate()
+	# ★ 이어할 것이 있으면 **CONTINUE 가 맨 위**다 (title.json 의 items_with_save).
+	#   흔한 쪽이 위에 있어야 아이가 매번 고르지 않아도 된다 — 커서 기본값도 거기다.
+	_items = menu.get("items_with_save" if _has_save() else "items_first_run",
+		["NEW GAME", "EXIT"]).duplicate()
 	if demo_build:
 		# 데모 빌드에서는 첫 항목이 DEMO 다. 새 게임이 아니라 **필드 한 조각**을 보여주는 것이라
 		# NEW GAME 이라고 적으면 없는 것을 약속하게 된다 (세이브도 사파리 층도 아직 없다).
@@ -352,9 +356,10 @@ func _activate(item: String) -> void:
 			if _has_save():
 				_ask("new_game", item)
 			else:
-				get_tree().change_scene_to_file(HOME_SCENE)
+				_begin_new()
 		"CONTINUE":
-			get_tree().change_scene_to_file(HOME_SCENE)
+			get_tree().change_scene_to_file(
+				HOME_SCENE if Game.tutorial_done else FIRST_SCENE)
 		"DEMO":
 			get_tree().change_scene_to_file(FIELD_SCENE)
 		"SETTING":
@@ -367,8 +372,16 @@ func _activate(item: String) -> void:
 			_wake()
 
 
+## 이어할 것이 있는가. **파일이 있으면 있다** — 첫 만남 도중에 껐어도 거기서 잇는다.
+## ⚠️ 오토로드를 이름으로 쓰지 않는다: 타이틀이 먼저 뜰 수 있다.
 func _has_save() -> bool:
-	return false   # 저장/불러오기는 Demo 1 범위 밖이다 (DEMO-SPEC §1)
+	return FileAccess.file_exists(GameState.SAVE_PATH)
+
+
+## 새 판은 **아무도 없이** 시작한다. 첫 강아지는 초대해서 얻는다 (§3.8).
+func _begin_new() -> void:
+	Game.start_new()
+	get_tree().change_scene_to_file(FIRST_SCENE)
 
 
 # --- 확인 창 — 되돌릴 수 없는 것에만 -----------------------------------------
@@ -400,7 +413,7 @@ func _process_confirm() -> void:
 		if _confirm_action == "EXIT":
 			get_tree().quit()
 		else:
-			get_tree().change_scene_to_file(HOME_SCENE)
+			_begin_new()
 
 
 ## 문구는 한글이다 — 첫 플레이어가 EXIT 도 NEW GAME 도 못 읽는다.

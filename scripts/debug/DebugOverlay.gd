@@ -1,11 +1,16 @@
 ## 디버그 오버레이 — Label 몇 개. 슬라이더 UI를 만들지 않는다. (DEMO-SPEC §3.7)
 ## 값은 리모트 인스펙터로 만진다.
+##
+## ★ **평소에는 꺼져 있다.** `F3` 로 켠다.
+##   화면에 늘 보이는 것은 실제 HUD 뿐이어야 한다 — 지명과 자리 둘 (BRIEF §3.4).
+##   개발용 숫자가 늘 떠 있으면 그게 화면의 첫인상이 되고, 다른 화면 위로도 겹친다.
 extends CanvasLayer
 
 @onready var _label: Label = $StatsLabel
 @onready var _hud: Control = $Hud
 
 func _ready() -> void:
+	visible = false
 	var font := SystemFont.new()
 	font.font_names = PackedStringArray([
 		"Apple SD Gothic Neo", "Noto Sans CJK KR", "Malgun Gothic", "Sans-Serif"])
@@ -15,7 +20,15 @@ func _ready() -> void:
 	_label.add_theme_constant_override("outline_size", 4)
 
 
+func _input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo \
+			and (event as InputEventKey).keycode == KEY_F3:
+		visible = not visible
+
+
+## 로드 거부는 조용히 넘어가면 안 된다 — 이건 꺼져 있어도 보여야 한다.
 func show_load_error(text: String) -> void:
+	visible = true
 	_label.text = "데이터 로드 거부\n" + text
 	_label.add_theme_color_override("font_color", Color(1.0, 0.55, 0.5))
 

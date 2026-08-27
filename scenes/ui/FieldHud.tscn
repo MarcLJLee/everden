@@ -1,0 +1,26 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/FieldHud.gd" id="1_hud"]
+
+[node name="FieldHud" type="CanvasLayer"]
+layer = 5
+script = ExtResource("1_hud")
+
+[node name="Panel" type="ColorRect" parent="."]
+offset_left = 6.0
+offset_top = 8.0
+offset_right = 118.0
+offset_bottom = 42.0
+color = Color(0, 0, 0, 0.45)
+
+[node name="Where" type="Label" parent="."]
+offset_left = 14.0
+offset_top = 11.0
+offset_right = 200.0
+offset_bottom = 26.0
+
+[node name="Seats" type="Label" parent="."]
+offset_left = 14.0
+offset_top = 25.0
+offset_right = 200.0
+offset_bottom = 40.0

@@ -56,6 +56,26 @@ static func ground_clue_texture(trait_name: String) -> Texture2D:
 
 
 ## 이 지형에 어울리는 프롭 이름 목록
+## 지형 타일 한 칸. 원본은 가로 스트립이라 **첫 프레임만** 떼어 쓴다.
+## 세계 지도가 배경을 새로 그리지 않고 이걸 넓게 깔아 지역 덩어리를 만든다 (§3.9).
+static func terrain_tile(name: String) -> Texture2D:
+	var path := ROOT + "/terrain/%s.png" % name
+	if not ResourceLoader.exists(path):
+		return null
+	var sheet: Texture2D = DayPalette.texture_for(path)
+	if sheet == null:
+		return null
+	var frame := AtlasTexture.new()
+	frame.atlas = sheet
+	frame.region = Rect2(0, 0, mini(16, sheet.get_width()), sheet.get_height())
+	return frame
+
+
+## ui/ 아래의 한 장. 로고·커서·지도 아이콘이 여기 있다.
+static func ui_texture(name: String) -> Texture2D:
+	return _texture_from("ui/%s.png" % name, false)
+
+
 static func props_for_terrain(terrain: String) -> Array:
 	return index().get("prop_terrain", {}).get(terrain, [])
 
@@ -97,6 +117,17 @@ static func canvas_for(species_id: String, fallback: Vector2i) -> Vector2i:
 	if typeof(declared) == TYPE_ARRAY and declared.size() >= 2:
 		return Vector2i(int(declared[0]), int(declared[1]))
 	return fallback
+
+
+## 이 종의 캔버스 한 칸. **크기를 못 박지 말 것** — 종마다 다르다.
+##
+## ⚠️ 32 로 박아뒀다가 24 폭으로 그려진 청설모가 **한 프레임 반**으로 잘려서
+##    초대 카드에 몸이 두 번 나왔다 (사용자 지적). 액터가 쓰는 것과 같은 길로 구한다.
+static func canvas_of(species: Dictionary, schema: TagSchema) -> Vector2i:
+	var fallback := Vector2i(32, 32)
+	if schema != null:
+		fallback = schema.canvas_for(String(species.get("size_class", "중")))
+	return canvas_for(String(species.get("id", "")), fallback)
 
 
 ## 그림이 앵커를 말하면 sprite_set 에 덮어쓴다.

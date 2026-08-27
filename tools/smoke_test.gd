@@ -6,6 +6,9 @@
 ## 여기서 잡는 것은 "구조가 사양대로인가" 뿐이다.
 extends SceneTree
 
+## 이 아래로 떨어지면 어딘가에서 판정이 조용히 끊긴 것이다.
+const FLOOR := 372
+
 var _pass := 0
 var _fail := 0
 
@@ -17,6 +20,20 @@ func _run() -> void:
 
 	var result := DataLoader.load_all(true)
 	_check("데이터 로드", result.ok, result.reject_reason)
+
+	# ⚠️ 회귀는 **진짜 저장 파일을 건드리면 안 된다** — 사람이 모아온 아이들이 거기 있다.
+	#    그리고 판을 여기서 짜 놓아야 한다: 저장 상태에 따라 결과가 달라지면
+	#    "어제는 통과했는데" 가 시작된다.
+	# ⚠️ 오토로드의 `_ready` 는 **첫 프레임에** 돌면서 진짜 저장을 읽어온다.
+	#    그 전에 판을 짜면 조용히 덮어써져서, 테스트가 사람의 세이브를 물고 돌게 된다.
+	#    실제로 그렇게 돌다가 동료가 하나로 줄어 세 판정이 깨졌다.
+	await process_frame
+	var game: GameState = root.get_node("Game")
+	game.autosave = false
+	game.start_new()
+	# 개와 고양이 둘 다 필요하다 — **감각 대비**가 이 회귀의 핵심이다 (BRIEF §3.8).
+	game.party = [int(game.add("dog")["uid"]), int(game.add("cat")["uid"])]
+	_check("회귀는 저장을 건드리지 않는다", not game.autosave)
 
 	var field: Node2D = load("res://scenes/field/Field.tscn").instantiate()
 	root.add_child(field)
@@ -42,7 +59,7 @@ func _run() -> void:
 	await _test_boot()
 	await _test_sense_reach(field)
 	await _test_terrain_walk(field)
-	await _test_weather(field)
+	await _test_weather(field, game)
 	await _test_presence(field)
 	await _test_individuals(field)
 	await _test_roster(field)
@@ -50,6 +67,11 @@ func _run() -> void:
 	await _test_puff(field)
 	await _test_invite(field)
 
+	# ⚠️ 판정 하나가 터지면 그 함수의 **나머지가 통째로 안 돈다.** 실패가 아니라
+	#    "조용히 사라짐" 이라 눈치채기 어렵다 — 이 프로젝트에서 다섯 번 겪었다.
+	#    그래서 **총 개수에 바닥을 둔다.** 판정을 지우려면 이 숫자도 같이 내려야 한다.
+	_check("판정이 중간에 끊기지 않았다", _pass + _fail >= FLOOR,
+		"%d 개 돌았다 (바닥 %d)" % [_pass + _fail, FLOOR])
 	print("")
 	print("=== 통과 %d / 실패 %d ===" % [_pass, _fail])
 	quit(0 if _fail == 0 else 1)
@@ -325,13 +347,30 @@ func _test_reveal(field) -> void:
 
 	field.guide.update([dog], [animal])
 	clues = field._apply_reveal()
-	_check("후각으로 잡으면 몸은 안 보이고 단서만 뜬다",
+	_check("후각으로 찾으면 몸은 안 보이고 단서만 뜬다",
 		not animal.actor.visible and clues.size() == 1 and clues[0]["sense"] == "후각",
 		"보임=%s 단서=%d" % [animal.actor.visible, clues.size()])
 
+	# ★ **몸을 원격으로 드러내는 감각은 없다** (BRIEF §3.14 · 사용자 지적).
+	#   동료가 감지했다고 저 멀리 있는 동물을 화면에 그리면 그건 세계의 사건이 아니라
+	#   게임이 알려주는 것이다. 눈도 "거기에 뭔가 있다" 까지만 말한다.
 	field.guide.update([cat], [animal])
 	clues = field._apply_reveal()
-	_check("시야로 잡으면 멀리서도 몸이 보인다", animal.actor.visible and clues.is_empty())
+	_check("시야로 찾아도 멀리 있는 몸은 안 보인다",
+		not animal.actor.visible, "보임=%s" % animal.actor.visible)
+	_check("대신 그 자리에 자국이 남는다",
+		clues.size() == 1 and String(clues[0]["sense"]) == "시야",
+		"단서 %d개" % clues.size())
+
+	# 범주는 갈린다 — 코와 귀는 **방향**(공중 표시), 눈은 **자리**(땅의 자국)
+	_check("눈의 단서는 자리를 말한다", field.schema.sense_marks_spot("시야"))
+	_check("코의 단서는 방향을 말한다", not field.schema.sense_marks_spot("후각"))
+	_check("귀의 단서도 방향을 말한다", not field.schema.sense_marks_spot("청각"))
+
+	# 가까이 가면 그때 보인다 — 발견의 순간은 아이의 것이다
+	field.player.position = animal.position
+	clues = field._apply_reveal()
+	_check("가까이 가면 보인다", animal.actor.visible)
 
 	# 감각이 하나도 없어도 코앞이면 보인다
 	animal.position = field.player.position + Vector2(8, 0)
@@ -437,17 +476,19 @@ func _test_boot() -> void:
 		and not timing.is_empty())
 	boot.free()
 
-	# 타이틀 — 첫 실행에는 CONTINUE 가 아예 없다 (BRIEF §6.7)
+	# 타이틀 — 메뉴는 **이어할 것이 있느냐**에 따라 갈린다 (BRIEF §6.7 · title.json)
 	var title: Control = load("res://scenes/ui/Title.tscn").instantiate()
 	root.add_child(title)
 	await process_frame
-	_check("타이틀 메뉴에 CONTINUE 가 없다 (세이브가 없으므로)",
-		not ("CONTINUE" in title._items), str(title._items))
+	var savable := FileAccess.file_exists(GameState.SAVE_PATH)
+	_check("이어할 것이 있을 때만 CONTINUE 가 뜬다",
+		("CONTINUE" in title._items) == savable,
+		"세이브 %s · %s" % [savable, title._items])
 	# 데모 빌드는 새 게임이 아니라 필드 한 조각을 보여준다 — 없는 것을 약속하지 않는다.
-	# 데모가 아니면 NEW GAME 이고, 들어가는 곳은 필드가 아니라 집이다 (BRIEF §2.7).
-	_check("데모 여부에 따라 첫 항목이 갈린다",
-		title._items[0] == ("DEMO" if title.demo_build else "NEW GAME"),
-		"demo=%s %s" % [title.demo_build, title._items])
+	# 데모가 아니면 첫 항목은 이어하기(있으면) 또는 새 게임이고, 들어가는 곳은 집이다.
+	var expected := "DEMO" if title.demo_build else ("CONTINUE" if savable else "NEW GAME")
+	_check("첫 항목이 지금 상태와 맞는다", title._items[0] == expected,
+		"demo=%s 세이브=%s %s" % [title.demo_build, savable, title._items])
 	_check("타이틀에서 고르면 집으로 들어간다",
 		ResourceLoader.exists(title.HOME_SCENE))
 	_check("동무 후보는 title.json 의 candidates 에서 온다",
@@ -463,7 +504,14 @@ func _test_boot() -> void:
 func _test_art_wiring(field) -> void:
 	var ground: Node2D = field.get_node("Ground")
 	var loaded: Dictionary = ground._sheets
-	_check("지형 4종이 모두 타일 그림을 갖는다", loaded.size() == 4, str(loaded.keys()))
+	for name in ["초원", "숲", "물가", "바위"]:
+		_check("지형 %s 에 타일 그림이 있다" % name, loaded.has(name), str(loaded.keys()))
+	# ★ **축척이 바뀌면 표현도 바뀐다** — 물가는 자리에 따라 다르게 그린다 (사용자 지적).
+	#   지형 이름을 늘리지 않는다. 늘리면 통행·서식지·생태 표가 전부 따라 늘어난다.
+	_check("물줄기 한가운데에 깔 물 그림이 있다", loaded.has("extra/water_0"))
+	_check("물과 뭍이 만나는 그림이 있다", loaded.has("extra/shore_N"))
+	_check("지형 이름은 넷 그대로다",
+		field.schema.terrain_walkable.size() == 4, str(field.schema.terrain_walkable.keys()))
 	_check("변형 개수가 이미지 폭에서 나온다",
 		ground._variants.get("초원", 0) == 6 and ground._variants.get("바위", 0) == 1,
 		str(ground._variants))
@@ -592,13 +640,20 @@ func _test_sense_reach(field) -> void:
 	field.guide.update([dog], [smelly])
 	_check("숲에 있어도 후각은 닿는다", "후각" in field.guide.detected_senses(smelly))
 
-	# 승격 거리가 감각보다 좁으면 감각이 헛돈다
+	# ★ 예전에는 "승격 거리가 가장 먼 감각을 덮는가" 를 쟀다. 저 멀리서 감지된 몸을
+	#   그려야 했기 때문이다 — 그 이유가 사라졌다(§3.14). 지금 지켜야 하는 것은
+	#   **단서가 노드 없이도 나오는가**와 **승격이 보이는 반경보다 넉넉한가** 둘이다.
 	var widest := 0.0
 	for companion in field.companions:
 		for sense in companion.senses:
 			widest = maxf(widest, field.guide.max_reach(companion, String(sense)))
-	_check("풀 AI 승격 거리가 가장 먼 감각을 덮는다", field._promotion_px >= widest,
+	_check("승격은 감각 반경을 안 따라간다 — 몸을 원격으로 그리지 않으니까",
+		field._promotion_px < widest,
 		"승격 %.0fpx / 감각 %.0fpx" % [field._promotion_px, widest])
+	_check("그래도 보이는 반경보다는 넉넉하다 — 화면에 들기 전에 이미 걷고 있어야 한다",
+		field._promotion_px > field.tuning.reveal_radius * field.tuning.tile_size,
+		"승격 %.0fpx / 보임 %.0fpx"
+			% [field._promotion_px, field.tuning.reveal_radius * field.tuning.tile_size])
 	await process_frame
 
 
@@ -666,7 +721,7 @@ func _test_terrain_walk(field) -> void:
 
 
 ## ★ 날씨는 이름이 아니라 축이다 (BRIEF §6.8)
-func _test_weather(field) -> void:
+func _test_weather(field, game) -> void:
 	var schema: TagSchema = field.schema
 	var dog: Actor = _find_companion(field, "dog")
 	var cat: Actor = _find_companion(field, "cat")
@@ -1268,6 +1323,453 @@ func _test_weather(field) -> void:
 	PropScatter.sway(far, 0.05, 1.0, wide)
 	_check("화면 밖 프롭은 건드리지 않는다", int(far[0]["at"]) == 0)
 
+	# ★ 새 판은 **아무도 없이** 시작한다. 처음부터 개와 고양이를 들려주면
+	#   "친구가 생긴다" 는 이 게임의 첫 사건이 사라진다 (사용자 지적).
+	var fresh := GameState.new()
+	fresh.autosave = false
+	fresh.start_new()
+	_check("새 판에는 아무도 없다", fresh.collection.is_empty(),
+		"%d 마리" % fresh.collection.size())
+	_check("새 판은 첫 만남을 안 지났다", not fresh.tutorial_done)
+	var puppy := fresh.finish_tutorial()
+	_check("첫 만남이 끝나면 강아지가 식구가 된다",
+		fresh.collection.size() == 1 and String(puppy["species_id"]) == "dog")
+	_check("그 아이가 그대로 첫 동료가 된다", fresh.party == [int(puppy["uid"])])
+	_check("첫 만남을 지났다고 남는다", fresh.tutorial_done)
+
+	# 개체는 종이 아니다 — 같은 종이라도 uid 로 센다
+	var another := fresh.add("dog", "female")
+	_check("같은 종을 또 데려와도 따로 센다",
+		fresh.collection.size() == 2 and int(another["uid"]) != int(puppy["uid"]))
+	_check("uid 로 찾는다", String(fresh.of_uid(int(another["uid"]))["sex"]) == "female")
+	_check("없는 uid 는 빈 값", fresh.of_uid(9999).is_empty())
+
+	# 짝 확정 배치 — 혼자인 종의 반대 성별이 필드에 반드시 정의된다 (BRIEF §2.4)
+	var only := GameState.new()
+	only.autosave = false
+	only.start_new()
+	only.add("squirrel", "male")
+	_check("혼자면 반대 성별을 찾는다",
+		String(only.lonely_species().get("squirrel", "")) == "female",
+		"%s" % [only.lonely_species()])
+	only.add("squirrel", "female")
+	_check("짝이 생기면 더 안 찾는다", not only.lonely_species().has("squirrel"))
+
+	# ⚠️ 원칙 1 — 동물은 죽지 않는다. 빼는 길이 없어야 한다.
+	var can_remove := false
+	for name in ["remove", "release", "drop", "delete", "kill"]:
+		if fresh.has_method(name):
+			can_remove = true
+	_check("식구를 빼는 길이 없다 — 동물은 죽지 않는다", not can_remove)
+
+	# 저장 → 불러오기가 그대로 돌아온다 (종 id 는 문자열이다 — 팩이 바뀌어도 안 깨진다)
+	for one in fresh.collection:
+		_check("종 id 는 문자열로 남는다", one["species_id"] is String)
+
+	# 조사는 받침을 따라간다 — "개 가 좋아할 거예요" 처럼 띄면 아이가 읽다가 걸린다
+	_check("받침 없으면 가", Josa.이가("개") == "개가")
+	_check("받침 있으면 이", Josa.이가("곰") == "곰이")
+	_check("청설모는 가", Josa.이가("청설모") == "청설모가")
+	_check("받침 있는 은", Josa.은는("고슴도치") == "고슴도치는")
+
+	# ★ **동물은 측면 1방향이다. 플레이어만 4방향.** (BRIEF §4.5 ★ v3.16)
+	#   방향은 곱셈이고 모션은 덧셈이다 — 예산을 방향이 아니라 모션에 쓴다.
+	_check("플레이어는 4방향이다", field.player.facing_set == "four")
+	var wild: Actor = _promoted(field, "squirrel")
+	_check("야생 동물은 측면 1방향이다", wild.facing_set == "side", wild.facing_set)
+	wild.move_vector = Vector2.UP
+	await process_frame
+	_check("측면 몸은 위로 가도 북향이 안 된다", wild.facing in ["east", "west"], wild.facing)
+	wild.move_vector = Vector2.DOWN
+	await process_frame
+	_check("아래로 가도 남향이 안 된다", wild.facing in ["east", "west"], wild.facing)
+	wild.move_vector = Vector2.ZERO
+	# 동료는 플레이어를 따라다니느라 세로로 걷는 시간이 길다 — 데이터가 4방향을 쓴다고 정한다
+	for companion in field.companions:
+		_check("동료 %s 는 4방향을 쓴다" % companion.species_id, companion.facing_set == "four")
+
+	# ⚠️ 측면 스프라이트가 수직으로 움직이면 미끄러져 보인다 — **AI 로 푼다** (도트 0장)
+	var straight_up := 0
+	var probe_rng := RandomNumberGenerator.new()
+	probe_rng.seed = 991
+	for i in 400:
+		var direction := Vector2.RIGHT.rotated(probe_rng.randf() * TAU)
+		var laid := FieldSim.sideways(direction)
+		if absf(laid.normalized().x) < FieldSim.SIDEWAYS - 0.001:
+			straight_up += 1
+		if not is_equal_approx(laid.length(), direction.length()):
+			straight_up += 1
+	_check("배회 방향에 수평 성분이 항상 있다", straight_up == 0, "%d/400 회" % straight_up)
+	_check("눕히면서 속도는 그대로 둔다",
+		is_equal_approx(FieldSim.sideways(Vector2(0, 3.0)).length(), 3.0))
+	_check("이미 옆으로 가는 방향은 안 건드린다",
+		FieldSim.sideways(Vector2(1, 0)) == Vector2(1, 0))
+	# 실제로 놓인 개체들도 그런가
+	var upright := 0
+	for animal in field.sim.animals:
+		if animal.velocity.length() > 0.01 and absf(animal.velocity.normalized().x) < 0.3:
+			upright += 1
+	_check("놓인 개체도 세로로만 가지 않는다", upright == 0, "%d 마리" % upright)
+
+	# ★ 초대 카드 — **축하지 평가가 아니다** (BRIEF §3.12). 능력치 숫자를 넣지 않는다.
+	var card: CanvasLayer = field.get_node("InviteCard")
+	# ⚠️ 덮는 판이 있는 화면은 **처음에 꺼져 있어야 한다.** 안 끄면 게임을 켜자마자
+	#    화면 전체가 어두워진다 (실제로 그렇게 나갔다 — 사용자 지적).
+	_check("초대 카드는 처음에 꺼져 있다", not card.visible)
+	_check("나가는 문도 처음에 꺼져 있다", not field.get_node("GoHome").visible)
+	var deer: Dictionary = DataLoader.load_all(true).species.get("water_deer", {})
+	card.show_for({"species_id": "water_deer", "sex": "male", "stage": "adult", "age_years": 3},
+		deer, true, field.schema)
+	_check("카드가 열린다", card.is_open())
+	# ⚠️ 캔버스 크기를 못 박으면 **옆 프레임이 딸려 온다** — 24폭으로 그려진 청설모가
+	#    32로 잘려 몸이 두 번 나왔다 (사용자 지적).
+	for one_id in ["squirrel", "water_deer", "sparrow"]:
+		var config: Dictionary = DataLoader.load_all(true).species.get(one_id, {})
+		card.show_for({"species_id": one_id, "sex": "male", "stage": "adult", "age_years": 2},
+			config, false, field.schema)
+		# ⚠️ 카드에는 뱃지·아이콘·키캡도 있다. **몸만** 재야 한다 —
+		#    아무 스프라이트나 재면 39px 짜리 키캡을 몸으로 착각한다.
+		var body_node := card.get_node("Art").get_node_or_null("Body")
+		var body_width: int = body_node.texture.get_width() if body_node != null else 0
+		var canvas := SpriteLibrary.canvas_of(config, field.schema)
+		_check("%s 의 몸이 한 마리만 나온다" % one_id, body_width <= canvas.x,
+			"그림 %dpx · 캔버스 %dpx" % [body_width, canvas.x])
+	card.show_for({"species_id": "water_deer", "sex": "male", "stage": "adult", "age_years": 3},
+		deer, true, field.schema)
+	var words: Array = []
+	for node in card.get_node("Text").get_children():
+		words.append(String(node.text))
+	var shown := " ".join(words)
+	_check("종 이름이 뜬다", "고라니" in shown, shown)
+	_check("단계가 먼저, 숫자는 곁들이", "어른 · 3살" in shown, shown)
+	_check("설명 두 줄이 뜬다", "엄니" in shown, shown)
+	_check("새 종이면 도감을 알린다", "도감" in shown)
+	# ⚠️ 숫자 능력치가 새어 나오면 "다시 뽑을까" 가 생긴다 (원칙 6)
+	for banned in ["매력", "감각 반경", "속도", "×", "%"]:
+		_check("카드에 '%s' 가 없다" % banned, not (banned in shown), shown)
+	var arts := card.get_node("Art").get_child_count()
+	_check("몸·성별·감각·키캡은 그림이다", arts >= 4, "%d 개" % arts)
+	# 몸은 **정수배로만** 키운다 — 실수배면 도트가 뭉개진다
+	for node in card.get_node("Art").get_children():
+		if node is Sprite2D:
+			var grow: float = node.scale.x
+			_check("정수배로만 키운다", is_equal_approx(grow, floor(grow)), "×%.2f" % grow)
+	# 아기는 숫자를 안 붙인다 — 아이가 묻는 것은 숫자가 아니라 관계다
+	card.show_for({"species_id": "water_deer", "sex": "female", "stage": "baby", "age_years": 0},
+		deer, false, field.schema)
+	var baby_words: Array = []
+	for node in card.get_node("Text").get_children():
+		baby_words.append(String(node.text))
+	var baby_shown := " ".join(baby_words)
+	_check("아기는 '아기' 만 뜬다", "아기" in baby_shown and not ("살" in baby_shown), baby_shown)
+	_check("이미 아는 종이면 도감을 안 알린다", not ("도감" in baby_shown))
+	card.visible = false
+	card._open = false
+
+	# ★ 키캡 — **문장에 키 이름을 넣지 않는다** (§2.10)
+	for action in ["이동", "고르기", "인사·정하기", "그만두기", "메뉴"]:
+		_check("키캡 그림이 있다 — %s" % action, Keycap.texture_for(action) != null)
+	# 오토로드는 이름이 아니라 트리에서 잡는다 — SceneTree 스크립트에서는 이름이 안 잡힌다
+	var was := String(game.last_device)
+	game.last_device = "key"
+	var by_key := Keycap.texture_for("인사·정하기")
+	game.last_device = "pad"
+	var by_pad := Keycap.texture_for("인사·정하기")
+	game.last_device = was
+	_check("패드를 들면 그림이 바뀐다", by_key != by_pad)
+
+	# ★ **나가는 길이 있다** (BRIEF §3.13). 이게 없어서 원정을 나가면 못 돌아왔다.
+	var door: CanvasLayer = field.get_node("GoHome")
+	_check("나가는 문이 있다", door != null)
+	if door != null:
+		_check("평소에는 닫혀 있다", not door.is_open())
+		door.open([field.companions[0].species])
+		_check("열린다", door.is_open())
+		var said: Array = []
+		for node in door.get_node("Text").get_children():
+			said.append(String(node.text))
+		var line := " ".join(said)
+		_check("무엇을 묻는지 한 줄로 말한다", "집에 갈까요?" in line, line)
+		_check("고를 것은 둘뿐이다", ("갈래요" in line) and ("더 놀래요" in line), line)
+		# ⚠️ **숫자로 적지 않는다** — "동료 2 / 초대 1" 은 성적표가 된다 (§6.9)
+		for banned in ["동료", "초대 ", "마리"]:
+			_check("나가는 문에 '%s' 를 안 적는다" % banned, not (banned in line), line)
+		_check("같이 가는 아이는 얼굴로 보여준다", door.get_node("Art").get_child_count() >= 3,
+			"%d 개" % door.get_node("Art").get_child_count())
+		door.close()
+		_check("닫힌다", not door.is_open())
+
+	# ★ 얼굴 — **이름 대신 쓰는 그림.** 캔버스가 아니라 **잉크**를 기준으로 오린다.
+	var face_of := Faces.of(field.player.species)
+	_check("얼굴을 오려낸다", Faces.of(_species_named(field, "dog")) != null)
+	var cut = Faces.of(_species_named(field, "dog"))
+	if cut is AtlasTexture:
+		var region: Rect2 = (cut as AtlasTexture).region
+		var whole := (cut as AtlasTexture).atlas.get_image()
+		var ink := Faces._ink(whole)
+		_check("빈 줄을 오리지 않는다 — head_anchor 는 머리가 아니라 아이콘 자리다",
+			region.position.y >= ink.position.y - 1.5,
+			"오린 자리 y=%.0f · 그림 시작 y=%.0f" % [region.position.y, ink.position.y])
+		_check("얼굴은 머리 쪽이다 — 측면 그림은 오른쪽을 본다",
+			region.end.x >= ink.end.x - 1.0,
+			"오린 오른쪽 %.0f · 그림 오른쪽 %.0f" % [region.end.x, ink.end.x])
+		_check("얼굴은 작다 — 크게 오리면 작은 전신 그림이 된다",
+			region.size.x <= 16 and region.size.y <= 16, "%s" % region.size)
+
+	# ★ **냇가에는 물이 있어야 한다** (사용자 지적). 웅덩이 아홉 개로 찍었더니
+	#   물이 3% 뿐이고 흩어져서 "냇가에 물이 없다" 가 됐다. 냇가는 덩어리가 아니라 **줄기**다.
+	var all_regions := DataLoader.load_all(true).regions
+	var wetness := {}
+	for id in ["home_hills", "home_creek"]:
+		var shape: Dictionary = (all_regions[id] as Dictionary).get("terrain", {})
+		var probe := TerrainMap.new()
+		for name in field.schema.terrain_walkable:
+			if not field.schema.walkable(String(name)):
+				probe.blocked_terrains.append(String(name))
+		var wet_rng := RandomNumberGenerator.new()
+		wet_rng.seed = 4242
+		probe.generate(Vector2i(64, 48), 16, shape.get("patches", {}), wet_rng,
+			String(shape.get("base", "초원")), shape.get("streams", {}))
+		var wet_tiles := 0
+		for y in 48:
+			for x in 64:
+				if probe.at_tile(Vector2i(x, y)) == "물가":
+					wet_tiles += 1
+		wetness[id] = float(wet_tiles) / (64.0 * 48.0)
+		# 줄기는 **이어져 있다** — 한 줄에 여러 칸이 나란히 붙는다
+		var widest_run := 0
+		for y in 48:
+			var run := 0
+			for x in 64:
+				run = run + 1 if probe.at_tile(Vector2i(x, y)) == "물가" else 0
+				widest_run = maxi(widest_run, run)
+		_check("%s 의 물은 이어져 흐른다 — 흩어진 웅덩이가 아니다" % id, widest_run >= 2,
+			"가장 긴 줄 %d칸" % widest_run)
+	_check("냇가에 물이 있다", wetness["home_creek"] > 0.06,
+		"%.1f%%" % (wetness["home_creek"] * 100.0))
+	_check("냇가가 뒷산보다 물이 많다 — 그게 지역을 고르는 이유다",
+		wetness["home_creek"] > wetness["home_hills"] * 2.0,
+		"냇가 %.1f%% · 뒷산 %.1f%%"
+			% [wetness["home_creek"] * 100.0, wetness["home_hills"] * 100.0])
+	_check("뒷산에도 개울은 있다", wetness["home_hills"] > 0.01,
+		"%.1f%%" % (wetness["home_hills"] * 100.0))
+
+	# ⚠️ **물 한가운데 갇히면 영영 다가갈 수 없다** — 되돌릴 수 없는 벽이다 (원칙 2).
+	#    물줄기를 좁히면 도랑이 되므로 AI 로 푼다: 뭍이 멀면 물가 쪽으로 향한다.
+	var swimmers: Array = []
+	for animal in field.sim.animals:
+		if "물가" in animal.species.get("habitat", []):
+			swimmers.append(animal)
+	if not swimmers.is_empty():
+		var bank_reach: float = field.tuning.interact_radius * field.tuning.tile_size
+		var touched := {}
+		for step in 900:
+			field.sim.update(1.0 / 60.0, field.player.position)
+			for animal in swimmers:
+				if touched.has(animal):
+					continue
+				for angle in 12:
+					var probe_at: Vector2 = animal.position \
+						+ Vector2.RIGHT.rotated(TAU * float(angle) / 12.0) * bank_reach
+					if field.terrain.can_stand(probe_at, field.schema, []):
+						touched[animal] = true
+						break
+		_check("물에 사는 개체도 언젠가는 다가갈 수 있다 — 갇히지 않는다",
+			touched.size() == swimmers.size(),
+			"%d / %d 마리" % [touched.size(), swimmers.size()])
+
+	# ★ 화면에 **늘 보이는 것은 지명과 자리 둘뿐**이다 (BRIEF §3.4).
+	var hud: CanvasLayer = field.get_node("FieldHud")
+	var always: Array = []
+	for node in hud.get_children():
+		if node is Label:
+			always.append(String(node.text))
+	_check("늘 보이는 줄은 둘뿐이다", always.size() == 2, "%s" % [always])
+	_check("지명이 보인다", "냇가" in always or "뒷산" in always, "%s" % [always])
+	var seat_line := ""
+	for line in always:
+		if line.begins_with("자리"):
+			seat_line = line
+	_check("자리가 보인다", not seat_line.is_empty(), "%s" % [always])
+	# ⚠️ 배고픔·청결·기분 게이지를 두지 않는다 — 늘 보이는 것이 늘면 화면이 할 일 목록이 된다
+	for banned in ["배고", "청결", "기분", "체력"]:
+		_check("HUD 에 '%s' 가 없다" % banned, not (banned in " ".join(always)))
+
+	# ★ 개발용 숫자는 **평소에 꺼져 있다** (F3). 다른 화면 위로 겹치면 안 된다.
+	_check("디버그 오버레이는 평소에 꺼져 있다",
+		not field.get_node("DebugOverlay").visible)
+
+	# ★ **갇히면 안 된다.** 스폰 자리가 물이나 바위면 어느 쪽으로도 못 움직였다 (사용자 지적).
+	#   들어가는 것만 막을 일이지 **나가는 것까지 막을 이유가 없다** (원칙 2).
+	_check("플레이어가 설 수 있는 자리에 선다",
+		field.terrain.can_stand(field.player.position, field.schema, []))
+	var homeless := []
+	for animal in field.sim.animals:
+		if not field.terrain.can_stand(animal.position, field.schema,
+				animal.species.get("habitat", [])):
+			homeless.append(animal.display_name())
+	_check("동물도 살 수 있는 자리에 놓인다", homeless.is_empty(), "%s" % [homeless])
+
+	# 억지로 막힌 자리에 세워도 나올 수 있어야 한다
+	var trapped := []
+	for spot in ["물가", "바위"]:
+		var at := Vector2.ZERO
+		for y in field.tuning.map_size.y:
+			for x in field.tuning.map_size.x:
+				if field.terrain.at_tile(Vector2i(x, y)) == spot:
+					at = Vector2(x + 0.5, y + 0.5) * field.tuning.tile_size
+					break
+			if at != Vector2.ZERO:
+				break
+		if at == Vector2.ZERO:
+			continue
+		var out: Vector2 = field.terrain.slide(at,
+			at + Vector2(field.tuning.tile_size, 0), field.schema, [])
+		if out == at:
+			trapped.append(spot)
+	_check("막힌 자리에 서 있어도 나갈 수 있다", trapped.is_empty(), "%s" % [trapped])
+	# 그래도 **들어가는 것은 막힌다** — 나가는 길을 연다고 통행 규칙이 풀리면 안 된다
+	var bank := Vector2.ZERO
+	for y in field.tuning.map_size.y:
+		for x in field.tuning.map_size.x:
+			if field.terrain.at_tile(Vector2i(x, y)) == "물가" \
+					and field.terrain.at_tile(Vector2i(x - 1, y)) == "초원":
+				bank = Vector2(x - 0.5, y + 0.5) * field.tuning.tile_size
+				break
+		if bank != Vector2.ZERO:
+			break
+	if bank != Vector2.ZERO:
+		var pushed: Vector2 = field.terrain.slide(bank,
+			bank + Vector2(field.tuning.tile_size, 0), field.schema, [])
+		_check("뭍에서 물로는 여전히 못 들어간다",
+			field.terrain.can_stand(pushed, field.schema, []))
+
+	# ★ **이어하기.** 이어할 것이 있으면 CONTINUE 가 맨 위에 뜬다 (title.json).
+	var menu_spec = JSON.parse_string(FileAccess.get_file_as_string(
+		"res://sprites/extracted/ui/title.json"))
+	var menu: Dictionary = (menu_spec as Dictionary).get("menu", {}) if menu_spec is Dictionary else {}
+	_check("세이브가 있을 때 쓸 메뉴를 설계가 넘겼다", menu.has("items_with_save"))
+	_check("첫 판에 쓸 메뉴도 넘겼다", menu.has("items_first_run"))
+	if menu.has("items_with_save"):
+		var with_save: Array = menu["items_with_save"]
+		var first_run: Array = menu["items_first_run"]
+		_check("이어하기가 맨 위다 — 흔한 쪽이 위에 있어야 매번 안 고른다",
+			String(with_save[0]) == "CONTINUE", "%s" % [with_save])
+		_check("첫 판에는 이어하기가 없다", not ("CONTINUE" in first_run), "%s" % [first_run])
+		_check("두 메뉴가 한 항목만 다르다", with_save.size() == first_run.size() + 1)
+
+	# 이어하면 어디로 가는가 — 첫 만남을 안 지났으면 거기서 잇는다
+	var half := GameState.new()
+	half.autosave = false
+	half.start_new()
+	_check("첫 만남 도중에 껐으면 거기서 잇는다", not half.tutorial_done)
+	half.finish_tutorial()
+	_check("첫 만남을 지났으면 집으로 잇는다", half.tutorial_done)
+	# ⚠️ 원정 중에 껐어도 **잃는 것은 없다** — 초대한 아이는 그 자리에서 저장된다 (원칙 2).
+	#    다시 나가면 개체는 새로 정해진다 (§3.11 — 개체 정의는 진입 시 한 번).
+	var before_count := half.collection.size()
+	half.add("squirrel")
+	_check("초대는 그 자리에서 남는다", half.collection.size() == before_count + 1)
+
+	# ★ **유도의 방향은 몸이 말한다** (BRIEF §4.5 ★ v3.16 · 사용자 지적).
+	#   화면 가장자리 화살표를 그리지 않는다 — 그건 게임이 알려주는 것이지
+	#   세계의 사건이 아니다. 개가 그쪽으로 당기는 것을 보고 아이가 따라간다.
+	# ⚠️ Field 의 `_process` 도 같은 일을 한다 — 켜둔 채로 여기서 또 부르면
+	#    동료가 한 프레임에 **두 번** 움직여서 줄 길이를 넘는다. 잠시 끄고 직접 몬다.
+	field.set_process(false)
+	# ⚠️ 앞선 판정이 남긴 걸음을 지운다 — 플레이어가 계속 걸어가면 목표가 움직여서
+	#    동료가 줄 길이를 넘은 것처럼 보인다.
+	field.player.move_vector = Vector2.ZERO
+	# ⚠️ **조건을 못 박는다.** 감각 반경은 날씨·시간대·지형이 다 같이 정한다 —
+	#    안 박아두면 이 판정이 그날 날씨에 따라 깜빡인다 (실제로 그랬다).
+	var clear_sky := {"cloud": 0.1, "fog": 0.0, "rain": 0.0, "snow": 0.0, "wind": 0.2}
+	field.weather.axes = clear_sky.duplicate()
+	field.weather.target = clear_sky.duplicate()
+	field.guide.set_weather_axes(clear_sky)
+	field._apply_daypart("낮")
+	var lead_dog: Actor = _find_companion(field, "dog")
+	var lead_cat: Actor = _find_companion(field, "cat")
+	var smelly_one := _find_animal(field, "raccoon_dog")
+	field.player.position = _find_terrain_point(field, "초원")
+	lead_dog.position = field.player.position
+	lead_cat.position = field.player.position
+	var leash: float = field.tuning.lead_leash * field.tuning.tile_size
+	var ahead := 0.0
+	var toward := 0.0
+	for step in 240:
+		# 날씨가 바뀌면 출현이 다시 정해진다 — 이 판정은 그걸 재는 게 아니므로 붙들어 둔다
+		smelly_one.present = true
+		# ⚠️ 감각이 겨우 닿는 거리에 두지 않는다 — 비가 오면 코가 짧아져서
+		#    판정이 날씨에 따라 깜빡인다. 넉넉히 안쪽에 둔다.
+		# ⚠️ **감각이 겨우 닿는 거리에 두지 않는다.** 150px 에 뒀더니 네 판에 한 번
+		#    감지가 안 잡혀 판정이 깜빡였다 — 어떤 감각으로도 확실히 닿는 자리에 둔다.
+		smelly_one.position = field.player.position + Vector2(60, 0)
+		field.guide.set_weather_axes(clear_sky)
+		field._follow_player(1.0 / 60.0)
+		field.guide.update(field._active_companions(), field.sim.present_animals())
+		await process_frame
+		ahead = maxf(ahead, lead_dog.position.distance_to(field.player.position))
+		toward = maxf(toward, (lead_dog.position - field.player.position)
+			.dot((smelly_one.position - field.player.position).normalized()))
+	_check("동료가 잡은 쪽으로 앞장선다", toward > leash * 0.6,
+		"대상 쪽으로 %.0fpx (줄 %.0fpx)" % [toward, leash])
+	_check("잡은 것이 있어야 이 판정이 뜻을 갖는다", field.guide.leads.has(lead_dog))
+	# ⚠️ **줄에 매인 것처럼.** 안 그러면 개가 혼자 화면 밖으로 달려가고,
+	#    그건 유도가 아니라 이별이다.
+	# ⚠️ **움직인 결과가 아니라 목표를 잰다.** 위치를 재면 앞선 판정이 남긴 걸음이
+	#    섞여 들어와 값이 깜빡인다 — 실제로 61~81px 사이에서 오갔다.
+	var worst_goal := 0.0
+	for companion in field._active_companions():
+		var mark: Vector2 = field.lead_goal(companion, field.player.position)
+		worst_goal = maxf(worst_goal, mark.distance_to(field.player.position))
+	_check("줄 길이를 넘지 않는다", worst_goal <= leash + 0.5,
+		"목표가 %.0fpx (줄 %.0fpx)" % [worst_goal, leash])
+	_check("앞장서긴 한다", ahead > 8.0, "앞선 거리 %.0fpx" % ahead)
+	_check("동료마다 자기가 잡은 것을 안다", field.guide.leads.has(lead_dog))
+
+	# 도착하면 거기서 꼬리를 흔든다 — 특징 동작은 **서 있을 때만** 나온다
+	_check("도착해서 흔든다 — 걸어가면서가 아니라",
+		lead_dog.play_special and lead_dog.move_vector == Vector2.ZERO,
+		"흔듦 %s · 움직임 %s" % [lead_dog.play_special, lead_dog.move_vector])
+
+	# ★ **종을 보지 않는다.** 고양이도 자기가 잡은 쪽으로 가서 거기서 액션을 한다.
+	#   유도는 동료의 감각이 만드는 것이지 그 동료가 개라서가 아니다 (원칙 4).
+	var seeing := _find_animal(field, "squirrel")
+	for step in 200:
+		seeing.present = true
+		seeing.position = field.player.position + Vector2(0, -60)
+		field.guide.set_weather_axes(clear_sky)
+		field._follow_player(1.0 / 60.0)
+		field.guide.update(field._active_companions(), field.sim.present_animals())
+		await process_frame
+	if field.guide.leads.has(lead_cat):
+		var cat_way: Vector2 = lead_cat.position - field.player.position
+		var wanted: Vector2 = (field.guide.leads[lead_cat].animal.position
+			- field.player.position).normalized()
+		_check("고양이도 자기가 잡은 쪽으로 간다", cat_way.dot(wanted) > leash * 0.5,
+			"%.0fpx" % cat_way.dot(wanted))
+		_check("고양이도 거기서 액션을 한다", lead_cat.play_special)
+		_check("액션 그림이 종마다 있다",
+			SpriteLibrary.has_art(lead_cat.species_id))
+
+	# 잡은 게 없으면 제자리로 돌아온다 — 늘 앞서 있으면 그게 유도로 안 읽힌다
+	var was_present := {}
+	for animal in field.sim.animals:
+		was_present[animal] = animal.present
+		animal.present = false
+	for step in 240:
+		field._follow_player(1.0 / 60.0)
+		field.guide.update(field._active_companions(), field.sim.present_animals())
+		await process_frame
+	_check("잡은 게 없으면 곁으로 돌아온다",
+		lead_dog.position.distance_to(field.player.position)
+			< field.tuning.follow_distance * field.tuning.tile_size + 24.0,
+		"%.0fpx" % lead_dog.position.distance_to(field.player.position))
+	_check("곁에 있을 때는 안 흔든다", not lead_dog.play_special)
+	for animal in was_present:
+		animal.present = bool(was_present[animal])
+	field.set_process(true)
+
 	# ★ 실제 날씨는 튀지 않는다 — 지금과 가까운 상태로만 옮겨간다 (사용자 지적)
 	var walker := WeatherSystem.new()
 	walker.setup(schema, RandomNumberGenerator.new(), {"초원": 2000, "숲": 600})
@@ -1641,6 +2143,25 @@ func _find_terrain_point(field, terrain_name: String) -> Vector2:
 ##    ① 지금 시간대에 안 나와 있을 수 있다 → 세워서 준다
 ##    ② **지역 생태 때문에 이번 원정에 0 마리일 수 있다** (BRIEF §3.11) → 만들어서 준다
 ##    여기서 검사하는 것은 노출·교감이지 존재 규칙이 아니다 (그건 _test_presence 가 본다).
+## 노드까지 붙은 개체. `_find_animal` 은 **얕은 시뮬 상태로 돌려줄 수 있어서**
+## `.actor` 가 null 이다 — 거기서 터지면 그 뒤 판정이 통째로 안 돈다 (실제로 그랬다).
+func _promoted(field, id: String) -> Actor:
+	var animal := _find_animal(field, id)
+	if animal == null:
+		return null
+	if animal.actor == null:
+		animal.position = field.player.position + Vector2(24, 0)
+		field.sim.update(0.016, field.player.position)
+	return animal.actor
+
+
+func _species_named(field, id: String) -> Dictionary:
+	for companion in field.companions:
+		if companion.species_id == id:
+			return companion.species
+	return DataLoader.load_all(true).species.get(id, {})
+
+
 func _find_animal(field, id: String) -> FieldSim.WildAnimal:
 	for animal in field.sim.animals:
 		if animal.species.get("id") == id and not animal.invited:

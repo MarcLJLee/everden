@@ -66,9 +66,26 @@ func sense_for_trait(trait_name: String) -> String:
 	var entry: Dictionary = trait_to_sense.get(trait_name, {})
 	return String(entry.get("sense", ""))
 
-## 이 감각으로 감지하면 몸까지 보이는가, 단서(방향)까지인가. (BRIEF §3.3)
-func sense_reveals_body(sense: String) -> bool:
-	return bool(_profile(sense).get("reveals", false))
+## 이 감각의 단서가 **자리를 말하는가, 방향을 말하는가.** (BRIEF §3.3 · §5.4)
+##
+## ★ **몸을 원격으로 드러내는 감각은 없다.** 동료가 감지했다고 저 멀리 있는 동물을
+##   화면에 그리면 그건 세계의 사건이 아니라 게임이 알려주는 것이다 —
+##   보이는 것은 언제나 **내 시야 안**에 있는 것이다.
+## ★ 그래도 범주는 갈린다. 코와 귀는 **공중 표시**(냄새·소리)라 "이쪽" 이고,
+##   눈은 **땅에 남은 자국**(발자국·물자국·허물)이라 "여기" 다.
+##   표를 따로 두지 않는다 — trait_to_sense 가 이미 그렇게 짜여 있다.
+func sense_marks_spot(sense: String) -> bool:
+	for trait_name in trait_to_sense:
+		if String(trait_to_sense[trait_name].get("sense", "")) != sense:
+			continue
+		if not clue_for_trait(String(trait_name)).is_empty():
+			return not (sense in airborne_senses())
+	return false
+
+
+## 공중에 뜨는 표시를 쓰는 감각 — 자리가 아니라 방향을 말한다.
+func airborne_senses() -> Array:
+	return SpriteLibrary.index().get("clue_airborne", {}).keys()
 
 ## guide_radius 에 곱할 감각 고유 배율. 후각이 제일 멀리 간다.
 func sense_range_scale(sense: String) -> float:

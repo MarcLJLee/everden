@@ -30,7 +30,7 @@ func _initialize() -> void:
 		ambient_bad = _check_ambient(result)
 		print("")
 		print("--- 감각 × 흔적 대조표 (trait_to_sense + sense_profile 로만 생성) ---")
-		print("    O = 몸이 보인다   △ = 방향·단서까지   X = 못 찾는다")
+		print("    ◆ = 자리를 알려준다(땅의 자국)   △ = 방향을 알려준다(공중 표시)   X = 못 찾는다")
 		_print_guide_matrix(result)
 
 	quit(0 if result.ok and ambient_bad == 0 else 1)
@@ -82,9 +82,7 @@ func _print_guide_matrix(result: DataLoader.Result) -> void:
 				var sense := result.schema.sense_for_trait(String(trait_name))
 				if not (sense in senses):
 					continue
-				if result.schema.sense_reveals_body(sense):
-					mark = "O"
-					break
-				mark = "△"
+				# 몸을 원격으로 드러내는 감각은 없다 — 자리를 말하느냐 방향을 말하느냐다
+				mark = "◆" if result.schema.sense_marks_spot(sense) else "△"
 			line += "%s %s  " % [target["name"], mark]
 		print("  " + line)

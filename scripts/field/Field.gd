@@ -21,6 +21,9 @@ const WEATHER_MARGIN := 1.6
 @onready var _weather_layers: WeatherLayers = $Weather
 @onready var _snow: SnowField = $Snow
 @onready var _ambient: AmbientLife = $AmbientAir
+@onready var _card: CanvasLayer = $InviteCard
+@onready var _go_home: CanvasLayer = $GoHome
+@onready var _hud: CanvasLayer = $FieldHud
 @onready var _camera: Camera2D = $Camera2D
 @onready var _overlay = $DebugOverlay
 @onready var _modulate: CanvasModulate = $CanvasModulate
@@ -48,6 +51,7 @@ var _clues: Array = []
 var _puffs: Array = []
 var _promotion_px := 0.0
 var _props: Array = []
+var _region_name := ""
 var _last_weather_name := ""
 ## 지금 원정 중인 지역. 세계 지도가 생기면 거기서 정해진다 (BRIEF §3.9).
 @export var region_id := "home_hills"
@@ -80,12 +84,13 @@ func _ready() -> void:
 			terrain.blocked_terrains.append(String(name))
 	# ★ 지형은 **지역이 정한다.** 모든 필드에 물가가 조금씩 섞이면
 	#   뒷산에 늘 개울이 있는 셈이 되어 "뒷산에 수달이 산다"가 되어버린다.
-	var region: Dictionary = result.regions.get(region_id, {})
+	var region: Dictionary = result.regions.get(Game.region_id, result.regions.get(region_id, {}))
 	var shape: Dictionary = region.get("terrain", {})
 	var patches: Dictionary = shape.get("patches", {
 		"숲": tuning.forest_patches, "물가": tuning.water_patches, "바위": tuning.rock_patches,
 	})
-	terrain.generate(tuning.map_size, tile, patches, _rng, String(shape.get("base", "초원")))
+	terrain.generate(tuning.map_size, tile, patches, _rng, String(shape.get("base", "초원")),
+		shape.get("streams", {}))
 	_ground.setup(tuning, terrain)
 	_props = PropScatter.scatter(_actors, terrain, tuning, _rng)
 	_camera.zoom = Vector2.ONE * tuning.camera_zoom
@@ -105,6 +110,9 @@ func _ready() -> void:
 	sim.setup(_actors, actor_scene, schema, tuning, _rng, _bounds, terrain, _promotion_px)
 	# 이 필드가 어느 지역인가. 지역이 늘면 여기만 갈아끼운다.
 	sim.region = region
+	_region_name = String(region.get("name", ""))
+	# 짝 없이 혼자인 종이 있으면 그 종의 반대 성별이 반드시 정의된다 (BRIEF §2.4 확정 배치)
+	sim.pair_needed = Game.lonely_species()
 
 	_target_species = _collect_targets(result.species)
 	sim.spawn(_target_species, player.position)
@@ -114,6 +122,14 @@ func _ready() -> void:
 	weather.setup(schema, _rng, _terrain_mix())
 	# 잡을 수 없는 생명. 지면·수면 생물은 Y-sort 안으로 들어가 캐릭터에 가린다.
 	_ambient.setup(terrain, _rng, _actors, region)
+	# ★ **나가는 길.** 이게 없어서 원정을 나가면 못 돌아왔다 (BRIEF §3.13).
+	#   여는 키는 저쪽이 갖는다 — 양쪽이 같은 키를 보면 열자마자 닫힌다.
+	_go_home.faces_provider = _going_home_faces
+	_go_home.schema_provider = func() -> TagSchema: return schema
+	# 늘 보이는 것은 **지명과 자리 둘뿐**이다 (BRIEF §3.4).
+	_hud.refresh(String(region.get("name", "")), Game.collection.size(), tuning.home_seats)
+	_go_home.go_home.connect(func() -> void:
+		get_tree().call_deferred("change_scene_to_file", "res://scenes/home/Home.tscn"))
 	_weather_layers.build()
 	# `godot --path . -- --snow` 로 켜면 눈부터 시작한다. 계절이 없는 동안 눈을 보려는 용도다.
 	if "--snow" in OS.get_cmdline_user_args():
@@ -131,11 +147,17 @@ func _process(delta: float) -> void:
 		return
 
 	_handle_debug_input()
-	player.move_vector = Input.get_vector("move_left", "move_right", "move_up", "move_down")
+	# 무언가 물어보는 동안에는 걸어 다니지 않는다
+	var asking: bool = _card.is_open() or _go_home.is_open()
+	player.move_vector = Vector2.ZERO if asking \
+		else Input.get_vector("move_left", "move_right", "move_up", "move_down")
+
 	_follow_player(delta)
 
 	sim.update(delta, player.position)
-	_current_hit = guide.update(_active_companions(), sim.active_animals())
+	# 유도는 **놓인 개체 전부**를 본다. 노드가 붙었는지는 상관없다 —
+	# 코는 저 너머의 냄새도 맡는다.
+	_current_hit = guide.update(_active_companions(), sim.present_animals())
 	if _current_hit != null:
 		metrics.note_guide()
 
@@ -162,6 +184,7 @@ func _process(delta: float) -> void:
 	_apply_eyeshine()
 	_update_interaction(delta)
 	metrics.update(delta)
+	_hud.refresh(String(_region_name), Game.collection.size(), tuning.home_seats)
 	_overlay.refresh(_build_state())
 
 
@@ -179,36 +202,53 @@ func _spawn_player() -> void:
 			"eye_anchor": {"front": [16, 10], "side": [21, 10]},
 			"mouth_anchor": {"front": [16, 15], "side": [24, 14]},
 			"head_anchor": [16, 3],
+			# 플레이어만 4방향이다 — 동물은 측면 1방향 (BRIEF §4.5 ★ v3.16)
+			"facing": "four",
 		},
 	}
 	player = _make_actor(config)
-	player.position = _bounds.size * 0.5
+	# ⚠️ 한가운데가 물이나 바위면 그대로 갇힌다 — 설 수 있는 가장 가까운 자리로 옮긴다.
+	player.position = terrain.nearest_standing(_bounds.size * 0.5, schema, [])
 	player.speed_tiles = tuning.move_speed
 	# 물가·바위는 못 밟는다. **동물에게는 걸리지 않는다** — 서식지이기 때문이다.
 	# 교감은 근처에서 되므로 물가에 선 수달을 물가 밖에서 부를 수 있다.
 	player.confine = _terrain_confine(player)
 
 
+## 누구를 데려왔는가는 **지도에서 고른 것**이다 (BRIEF §3.9).
+## 저장에 아무도 없으면(DEMO 로 바로 들어온 경우) 튜닝의 기본값을 쓴다.
 func _spawn_companions(species_by_id: Dictionary) -> void:
-	for index in tuning.companion_ids.size():
-		var id := tuning.companion_ids[index]
-		if not species_by_id.has(id):
-			push_warning("동료로 지정된 '%s' 가 데이터에 없습니다" % id)
-			continue
-		var companion := _make_actor(species_by_id[id])
+	var going: Array = []
+	for one in Game.party_members():
+		if species_by_id.has(String(one["species_id"])):
+			going.append(one)
+	if going.is_empty():
+		for id in tuning.companion_ids:
+			if species_by_id.has(id):
+				going.append({"species_id": id, "sex": ""})
+	for index in going.size():
+		var one: Dictionary = going[index]
+		var companion := _make_actor(species_by_id[String(one["species_id"])],
+			String(one.get("sex", "")))
 		companion.position = player.position + Vector2(-tuning.tile_size * (index + 1), 8)
 		companion.speed_tiles = tuning.move_speed * tuning.companion_speed_scale
 		companions.append(companion)
-	_active_companion_ids.assign(tuning.companions_active_at_start)
+	# 데려온 아이는 처음부터 같이 다닌다 — 지도에서 이미 골랐다.
+	_active_companion_ids.clear()
+	for companion in companions:
+		_active_companion_ids.append(companion.species_id)
 	_sync_companion_visibility()
 
 
 ## 동료로 데려가는 종을 뺀 나머지가 필드의 대상이다. 코드가 종을 고르지 않는다 —
 ## 누구를 데려갈지는 tuning 의 companion_ids 에 적혀 있다.
 func _collect_targets(species_by_id: Dictionary) -> Array:
+	var going: Array = []
+	for companion in companions:
+		going.append(companion.species_id)
 	var targets: Array = []
 	for id in species_by_id:
-		if id in tuning.companion_ids:
+		if id in going:
 			continue
 		targets.append(species_by_id[id])
 	return targets
@@ -220,10 +260,22 @@ func _terrain_confine(actor: Actor) -> Callable:
 		return terrain.slide(from, at.clamp(_bounds.position, _bounds.end), schema, actor.habitat)
 
 
-func _make_actor(config: Dictionary) -> Actor:
+## 같이 가는 아이들 — 데려온 동료와 오늘 초대한 아이.
+## ⚠️ **숫자로 적지 않는다.** "동료 2 / 초대 1" 이라고 쓰면 그게 성적표가 된다 (§6.9).
+func _going_home_faces() -> Array:
+	var faces: Array = []
+	for companion in companions:
+		faces.append(companion.species)
+	for animal in sim.animals:
+		if animal.invited:
+			faces.append(animal.species)
+	return faces
+
+
+func _make_actor(config: Dictionary, sex := "") -> Actor:
 	var actor: Actor = actor_scene.instantiate()
 	_actors.add_child(actor)
-	actor.setup(config, schema, tuning, _rng)
+	actor.setup(config, schema, tuning, _rng, sex)
 	actor.bounds = _bounds
 	return actor
 
@@ -238,21 +290,50 @@ func _active_companions() -> Array:
 	return out
 
 
-func _follow_player(_delta: float) -> void:
+## 동료는 평소에 따라오고, **무언가를 잡으면 그쪽으로 앞장선다.**
+##
+## ★ **유도의 방향은 몸이 말한다** (BRIEF §4.5 ★ v3.16). 화면 가장자리 화살표를
+##   그리지 않는다 — 그건 게임이 알려주는 것이지 세계의 사건이 아니다.
+##   개가 그쪽으로 당기는 것을 보고 아이가 따라가는 것, 그게 유도다.
+## ★ 도착하면 **거기서 꼬리를 흔든다** — 특징 동작은 서 있을 때만 나온다.
+##   걸어가는 동안 흔들면 그건 이동이지 "여기야" 가 아니다.
+## ★ **줄에 매인 것처럼 굴어야 한다.** 앞장서되 플레이어에게서 `lead_leash` 만큼만
+##   멀어진다. 그 끝에서 멈춰 돌아본다 — 아이가 따라오면 그만큼 더 간다.
+##   안 그러면 개가 혼자 화면 밖으로 달려가고, 그건 유도가 아니라 이별이다.
+func _follow_player(delta: float) -> void:
 	var active := _active_companions()
+	var leash := tuning.lead_leash * tuning.tile_size
 	for index in active.size():
 		var companion: Actor = active[index]
 		var lateral := tuning.tile_size * 0.9 * (1.0 if index % 2 == 0 else -1.0)
 		var goal := player.position + Vector2(lateral, tuning.follow_distance * tuning.tile_size)
+		goal = lead_goal(companion, goal)
 		var to_goal := goal - companion.position
 		var distance := to_goal.length()
-		if distance < 4.0:
+		companion.speed_tiles = minf(
+			tuning.move_speed * tuning.companion_speed_scale,
+			distance / tuning.tile_size * 2.5)
+		# ⚠️ 한 걸음 안쪽이면 **딱 붙여 세운다.** 지나쳤다 돌아오기를 반복하면
+		#    줄 끝에서 부르르 떨고, 멈춰야 나오는 **꼬리 흔들기가 안 나온다**
+		#    (특징 동작은 서 있을 때만 재생된다).
+		var step := companion.speed_tiles * companion.move_scale * tuning.tile_size * delta
+		if distance <= maxf(step, 2.0):
+			companion.position = goal
 			companion.move_vector = Vector2.ZERO
 		else:
 			companion.move_vector = to_goal.normalized()
-			companion.speed_tiles = minf(
-				tuning.move_speed * tuning.companion_speed_scale,
-				distance / tuning.tile_size * 2.5)
+
+
+## 이 동료가 가려는 자리. 잡은 게 있으면 **그쪽으로, 줄 길이까지만.**
+## ⚠️ 따로 뺀 이유는 회귀가 이걸 직접 재기 위해서다 — 움직인 결과를 재면
+##    다른 판정이 남긴 걸음이 섞여 들어와 값이 깜빡인다.
+func lead_goal(companion: Actor, resting: Vector2) -> Vector2:
+	var hit: GuideSystem.Hit = guide.leads.get(companion)
+	if hit == null:
+		return resting
+	var toward: Vector2 = hit.animal.position - player.position
+	var far: float = minf(toward.length(), tuning.lead_leash * tuning.tile_size)
+	return player.position + toward.normalized() * far
 
 
 func _sync_companion_visibility() -> void:
@@ -276,15 +357,19 @@ func _toggle_companion(index: int) -> void:
 
 # --- 무엇이 보이는가 ---------------------------------------------------------
 
-## 멀리 있는 동물은 그냥 보이지 않는다. 보이게 만드는 것은 둘 중 하나다 —
-## 가까이 가거나, 몸을 드러내는 감각(tags.json 의 sense_reveals)을 가진 동료를 데려가거나.
-## 그 밖의 감각은 방향과 단서까지만 알려준다. (BRIEF §3.3)
+## ★ **보이는 것은 언제나 내 시야 안에 있는 것이다.** (BRIEF §3.14 · 사용자 지적)
+##   동료가 감지했다고 저 멀리 있는 동물을 화면에 그리는 건 세계의 사건이 아니라
+##   **게임이 알려주는 것**이다. 감각은 전부 "거기에 뭔가 있다" 까지만 말한다.
+##   그래서 발견의 순간이 아이에게 남는다 — 동료는 데려다주고, 보는 것은 아이가 한다.
+##
+## ★ 단서는 **놓인 개체 전부**에서 나온다. 노드가 붙은 개체만 보면
+##   승격 반경이 감각 반경 전체를 덮어야 했다 — 이제 보이는 반경만 덮으면 된다.
 func _apply_reveal() -> Array:
 	var reveal_px := tuning.reveal_radius * tuning.tile_size
 	var clues: Array = []
 	for animal in sim.active_animals():
 		var near := player.position.distance_to(animal.position) <= reveal_px
-		animal.actor.visible = near or guide.reveals_body(animal)
+		animal.actor.visible = near
 		# 보이던 게 그냥 없어지면 아이는 무슨 일이 났는지 모른다. 먼지를 남긴다.
 		if animal.actor.visible != animal.was_visible:
 			_puffs.append({
@@ -293,7 +378,11 @@ func _apply_reveal() -> Array:
 				"hiding": animal.was_visible,
 			})
 		animal.was_visible = animal.actor.visible
-		if animal.actor.visible:
+	# 노드가 없는 개체도 단서는 남긴다 — 흔적은 몸이 아니라 자리에 있는 것이다
+	for animal in sim.animals:
+		if animal.invited or not animal.present:
+			continue
+		if animal.is_active() and animal.actor != null and animal.actor.visible:
 			continue
 		var senses := guide.detected_senses(animal)
 		if senses.is_empty():
@@ -351,16 +440,19 @@ func _age_puffs(delta: float) -> void:
 	_puffs = _puffs.filter(func(puff): return puff["age"] < PUFF_LIFE)
 
 
-## 감각이 닿는 곳보다 승격 거리가 좁으면 코가 헛돈다 — 조용히 넘어가지 않는다.
+## 승격은 **보이는 반경**만 덮으면 된다. (BRIEF §3.14)
+##
+## ⚠️ 예전에는 여기서 승격 반경을 **감각 반경까지 되올렸다.** 저 멀리서 감지된 몸을
+##    그려야 했기 때문이다 — 그 이유가 없어졌는데 장치만 남아 있어서, 튜닝을 8타일로
+##    낮춰도 조용히 26타일로 돌아가고 있었다. 안 쓰는 안전장치가 제일 위험하다.
+## ⚠️ 그래도 **보이는 반경보다는 넉넉해야** 한다. 딱 맞으면 몸이 화면에 들어오는 순간
+##    노드가 붙어서, 걷던 자세가 아니라 선 자세로 툭 나타난다.
 func _promotion_radius_px() -> float:
 	var widest := tuning.activation_radius * tuning.tile_size
-	var needed := 0.0
-	for companion in companions:
-		for sense in companion.senses:
-			needed = maxf(needed, guide.max_reach(companion, String(sense)))
-	if needed > widest:
-		push_warning("activation_radius(%.1f타일)가 가장 먼 감각(%.1f타일)보다 좁아 %.1f타일로 올려 씁니다"
-			% [tuning.activation_radius, needed / tuning.tile_size, needed / tuning.tile_size])
+	var needed := tuning.reveal_radius * tuning.tile_size * 1.5
+	if widest < needed:
+		push_warning("activation_radius(%.1f타일)가 보이는 반경(%.1f타일)보다 좁아 %.1f타일로 올려 씁니다"
+			% [tuning.activation_radius, tuning.reveal_radius, needed / tuning.tile_size])
 		return needed
 	return widest
 
@@ -368,15 +460,27 @@ func _promotion_radius_px() -> float:
 # --- 교감 ------------------------------------------------------------------
 
 func _update_interaction(delta: float) -> void:
+	if _card.is_open() or _go_home.is_open():
+		return
 	if gauge.active:
 		player.look_direction = gauge.target.position - player.position
 		if Input.is_action_just_pressed("interact_cancel"):
 			gauge.cancel()  # 취소는 플레이어가 명시적으로 누를 때만
 			return
 		if gauge.update(delta, player.position.distance_to(gauge.target.position)):
+			# ★ 친구가 생긴 순간은 **바로 저장한다** (사용자 지적).
+			#   원정 중에 창을 닫아도 만난 아이가 사라지면 되돌릴 수 없는 손실이다 (원칙 2).
+			var species: Dictionary = gauge.target.species
+			var fresh := not (String(species.get("id", "")) in Game.seen)
+			var one := Game.add(String(species.get("id", "")), gauge.target.sex)
+			one["stage"] = gauge.target.stage
+			one["age_years"] = gauge.target.age_years
+			Game.save_game()
 			sim.invite(gauge.target)
 			metrics.note_invited()
 			gauge.close()
+			# 누구를 초대했는지 보여준다. 축하지 평가가 아니다 (§3.12).
+			_card.show_for(one, species, fresh, schema)
 			return
 		# 멈춰 있는 동안에는 다른 아이에게 갈 수 있다. 점유 중일 때는 못 바꾼다 —
 		# 지금 하고 있는 일이 있는데 딴 데를 누르면 그게 더 이상하다.
@@ -558,7 +662,8 @@ func _restart_run() -> void:
 		if animal.is_active():
 			animal.actor.queue_free()
 	sim.animals.clear()
-	player.position = _bounds.size * 0.5
+	# ⚠️ 한가운데가 물이나 바위면 그대로 갇힌다 — 설 수 있는 가장 가까운 자리로 옮긴다.
+	player.position = terrain.nearest_standing(_bounds.size * 0.5, schema, [])
 	for companion in companions:
 		companion.position = player.position + Vector2(-tuning.tile_size, 8)
 		companion.hide_sense_icon()

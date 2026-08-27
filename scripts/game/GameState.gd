@@ -101,9 +101,28 @@ func note_seen(species_id: String) -> void:
 	seen.append(species_id)
 
 
+## 이 아이가 지금 같이 가는가. uid 는 언제나 정수로 견준다.
+func going(uid: int) -> bool:
+	return int(uid) in party
+
+
+## 데려가거나 두고 간다. 꽉 찼으면 가장 먼저 고른 아이가 나간다 —
+## 막고 끝내면 왜 안 되는지가 안 보인다.
+func toggle_party(uid: int) -> void:
+	var id := int(uid)
+	if going(id):
+		party.erase(id)
+	elif party.size() < PARTY_MAX:
+		party.append(id)
+	else:
+		party.pop_front()
+		party.append(id)
+	save_game()
+
+
 func of_uid(uid: int) -> Dictionary:
 	for one in collection:
-		if int(one["uid"]) == uid:
+		if int(one["uid"]) == int(uid):
 			return one
 	return {}
 
@@ -166,7 +185,18 @@ func load_game() -> bool:
 	collection = parsed.get("collection", [])
 	seen = parsed.get("seen", [])
 	region_id = String(parsed.get("region_id", "home_hills"))
-	party = parsed.get("party", [])
+	# ⚠️ JSON 에서 온 숫자는 **실수**다. uid 를 그대로 두면 불러온 1.0 과 새로 고른 1 이
+	#    서로 다른 것으로 보여서, 같은 아이가 동료에 두 번 들어간다 (실제로 그랬다).
+	# 겹친 것도 여기서 걷어낸다 — 이미 저장된 판이 있으므로 고치는 김에 고쳐 준다.
+	# 같은 아이가 둘이면 필드에 **개가 두 마리** 나온다 (사용자 지적).
+	party = []
+	for uid in parsed.get("party", []):
+		if not (int(uid) in party):
+			party.append(int(uid))
+	while party.size() > PARTY_MAX:
+		party.pop_back()
+	for one in collection:
+		one["uid"] = int(one["uid"])
 	_next_uid = int(parsed.get("next_uid", collection.size() + 1))
 	tutorial_done = bool(parsed.get("tutorial_done", false))
 	return true

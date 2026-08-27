@@ -77,16 +77,7 @@ func _accept() -> void:
 		return
 	if _pickable.is_empty():
 		return
-	var uid := int(_pickable[_at]["uid"])
-	if uid in Game.party:
-		Game.party.erase(uid)
-	elif Game.party.size() < Game.PARTY_MAX:
-		Game.party.append(uid)
-	else:
-		# 꽉 찼으면 가장 먼저 고른 아이가 나간다. 막고 끝내면 왜 안 되는지 안 보인다.
-		Game.party.pop_front()
-		Game.party.append(uid)
-	Game.save_game()
+	Game.toggle_party(int(_pickable[_at]["uid"]))
 	_refresh()
 
 
@@ -106,7 +97,7 @@ func _refresh() -> void:
 		var one: Dictionary = _pickable[i]
 		var config: Dictionary = _species.get(String(one["species_id"]), {})
 		var x := start + i * STEP
-		var going := int(one["uid"]) in Game.party
+		var going := Game.going(int(one["uid"]))
 		var here := i == _at and not _on_go
 
 		var face := Faces.place(_art, Faces.of(config, _schema), Vector2(x, ROW_Y), 2)

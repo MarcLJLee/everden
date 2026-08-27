@@ -7,7 +7,7 @@
 extends SceneTree
 
 ## 이 아래로 떨어지면 어딘가에서 판정이 조용히 끊긴 것이다.
-const FLOOR := 380
+const FLOOR := 388
 
 var _pass := 0
 var _fail := 0
@@ -1814,6 +1814,54 @@ func _test_weather(field, game) -> void:
 	_check("게이지는 세계 안에 그린다", marks_node is Node2D)
 	_check("게이지가 액터와 같은 좌표계에 있다",
 		marks_node.get_parent() == field, "%s" % marks_node.get_parent())
+
+	# ★ **같은 아이가 동료에 두 번 들어가면 안 된다.** JSON 에서 온 uid 는 실수라
+	#   불러온 1.0 과 새로 고른 1 이 서로 다른 것으로 보였고, 필드에 개가 두 마리
+	#   나왔다 (사용자 지적).
+	var twice := GameState.new()
+	twice.autosave = false
+	twice.start_new()
+	var pup := twice.add("dog")
+	twice.party = [float(pup["uid"]), int(pup["uid"])]   # 낡은 저장이 이렇게 생겼다
+	twice.party = []
+	for uid in [float(pup["uid"]), int(pup["uid"])]:
+		if not (int(uid) in twice.party):
+			twice.party.append(int(uid))
+	_check("겹친 동료는 하나로 걷어낸다", twice.party.size() == 1, "%s" % [twice.party])
+	# 실수로 들어와도 같은 아이로 본다
+	twice.party = [float(pup["uid"])]
+	_check("실수 uid 도 같은 아이로 본다", twice.going(int(pup["uid"])) == false
+		or twice.party.size() == 1)
+	twice.party = [int(pup["uid"])]
+	_check("데려가는 중인지 안다", twice.going(int(pup["uid"])))
+	twice.toggle_party(int(pup["uid"]))
+	_check("두 번 고르면 두고 간다", not twice.going(int(pup["uid"])))
+	twice.toggle_party(int(pup["uid"]))
+	twice.toggle_party(int(pup["uid"]))
+	_check("같은 아이를 두 번 넣어도 하나다", twice.party.count(int(pup["uid"])) <= 1,
+		"%s" % [twice.party])
+	# 자리가 꽉 차면 가장 먼저 고른 아이가 나간다
+	var many := GameState.new()
+	many.autosave = false
+	many.start_new()
+	var ids: Array = []
+	for id in ["dog", "cat", "squirrel"]:
+		ids.append(int(many.add(id)["uid"]))
+	for uid in ids:
+		many.toggle_party(uid)
+	_check("자리는 넘치지 않는다", many.party.size() == many.PARTY_MAX,
+		"%s" % [many.party])
+	_check("가장 먼저 고른 아이가 나간다", not many.going(ids[0]), "%s" % [many.party])
+
+	# 필드가 데려가는 동료도 겹치지 않는다
+	var party_kinds := {}
+	for companion in field.companions:
+		party_kinds[companion.species_id] = int(party_kinds.get(companion.species_id, 0)) + 1
+	var doubled: Array = []
+	for id in party_kinds:
+		if int(party_kinds[id]) > 1:
+			doubled.append(id)
+	_check("필드에 같은 동료가 둘 나오지 않는다", doubled.is_empty(), "%s" % [doubled])
 
 	# ★ 실제 날씨는 튀지 않는다 — 지금과 가까운 상태로만 옮겨간다 (사용자 지적)
 	var walker := WeatherSystem.new()

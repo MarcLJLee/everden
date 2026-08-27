@@ -333,7 +333,7 @@ func _update_interaction(delta: float) -> void:
 		player.look_direction = gauge.target.position - player.position
 		if Input.is_action_just_pressed("interact_cancel"):
 			gauge.cancel()  # 취소는 플레이어가 명시적으로 누를 때만
-		elif gauge.update(delta):
+		elif gauge.update(delta, player.position.distance_to(gauge.target.position)):
 			sim.invite(gauge.target)
 			metrics.note_invited()
 			gauge.cancel()

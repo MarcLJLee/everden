@@ -79,8 +79,17 @@ func _draw_gauge(gauge: Gauge) -> void:
 	var bar := Vector2(64, 8)
 	var origin := anchor - Vector2(bar.x * 0.5, 0)
 	draw_rect(Rect2(origin - Vector2.ONE, bar + Vector2.ONE * 2), Color(0, 0, 0, 0.55))
-	draw_rect(Rect2(origin, Vector2(bar.x * gauge.progress, bar.y)), Color(1.0, 0.87, 0.45))
-	_draw_sparkles(_to_screen(head), gauge.progress)
+	var fill := Color(1.0, 0.87, 0.45) if not gauge.paused else Color(0.62, 0.60, 0.52)
+	draw_rect(Rect2(origin, Vector2(bar.x * gauge.progress, bar.y)), fill)
+	if gauge.paused:
+		# 왜 안 차는지가 보여야 한다 — 대상까지 선을 긋고 테두리를 깜빡인다.
+		var blink: float = 0.45 + 0.35 * sin(float(Time.get_ticks_msec()) * 0.008)
+		draw_rect(Rect2(origin - Vector2.ONE, bar + Vector2.ONE * 2),
+			Color(1.0, 0.9, 0.6, blink), false, 1.0)
+		var player_at := _to_screen(_state["player"].position)
+		draw_dashed_line(player_at, _to_screen(head), Color(1.0, 0.9, 0.6, 0.5), 1.0, 5.0)
+	else:
+		_draw_sparkles(_to_screen(head), gauge.progress)
 
 
 ## 대상의 상호작용 모션은 만들지 않는다 — 기존 대기 스프라이트 + 이펙트다. (DEMO-SPEC §3.5)

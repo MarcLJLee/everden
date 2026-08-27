@@ -44,6 +44,10 @@ extends Resource
 ## Field 가 실제 감각 반경을 계산해 이 값이 모자라면 올려 쓰고 경고를 남긴다.
 @export var activation_radius: float = 26.0
 @export var interact_radius: float = 1.5
+## 교감을 이어가려면 이 거리 안에 있어야 한다. **벗어나면 멈출 뿐 줄지 않는다** —
+## 되돌릴 수 없는 실패를 만들지 않는다(원칙 2). 시작 반경보다 조금 넉넉해야
+## 발을 조금 떼는 것만으로 멈추지 않는다.
+@export var hold_radius: float = 2.6
 
 @export_group("교감 게이지")
 @export var base_gauge_time: float = 3.0

@@ -7,6 +7,8 @@ class_name Gauge
 extends RefCounted
 
 var active := false
+## 지금 멈춰 있는가. 멀어져서 멈춘 것이지 실패한 것이 아니다.
+var paused := false
 var progress := 0.0        ## 0.0 ~ 1.0
 var duration := 0.0
 var factor := 1.0
@@ -36,8 +38,12 @@ func start(animal: FieldSim.WildAnimal, companion: Actor, daypart: String) -> vo
 
 
 ## 방금 다 찼으면 true. 한 번만 true 를 돌려준다.
-func update(delta: float) -> bool:
+## distance 를 넘기면 점유 판정을 한다 — 멀면 멈춘다(줄지는 않는다).
+func update(delta: float, distance := -1.0) -> bool:
 	if not active:
+		return false
+	paused = distance >= 0.0 and distance > _tuning.hold_radius * _tuning.tile_size
+	if paused:
 		return false
 	progress += delta / maxf(duration, 0.01)
 	if progress < 1.0:
@@ -50,6 +56,7 @@ func update(delta: float) -> bool:
 ## 플레이어가 명시적으로 누른 경우에만 호출된다.
 func cancel() -> void:
 	active = false
+	paused = false
 	progress = 0.0
 	target = null
 	lead = null

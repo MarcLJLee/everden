@@ -195,6 +195,28 @@ const SUBSTITUTES := {
 	"special": "idle",
 }
 
+## 이 동작에 실제로 쓸 파일 이름. 없으면 대역을 찾고, 그것도 없으면 빈 문자열.
+##
+## ★ 대역 사슬에 **고리**가 있다 (move_south → move_side → move_south).
+##   방문한 곳을 기억하지 않으면 없는 파일을 그대로 로드해서 터진다 —
+##   실제로 idle 만 있는 종이 들어왔을 때 그렇게 터졌다.
+static func _substitute_for(species_id: String, anim: String) -> String:
+	var seen := {}
+	var source := anim
+	while not seen.has(source):
+		if ResourceLoader.exists(_strip_path(species_id, source)):
+			return source
+		seen[source] = true
+		source = String(SUBSTITUTES.get(source, ""))
+		if source.is_empty():
+			break
+	# 사슬이 고리를 돌았다. 있는 것 아무거나 쓴다 — idle 이 먼저다.
+	for candidate in ANIMATIONS:
+		if ResourceLoader.exists(_strip_path(species_id, candidate)):
+			return candidate
+	return ""
+
+
 ## 이 종의 그림이 하나라도 있는가
 static func has_art(species_id: String) -> bool:
 	for anim in ANIMATIONS:
@@ -216,12 +238,11 @@ static func body_frames(species: Dictionary, canvas: Vector2i) -> Dictionary:
 		frames.add_animation(anim)
 		frames.set_animation_loop(anim, true)
 		frames.set_animation_speed(anim, 6.0)
-		var source: String = anim
-		while not ResourceLoader.exists(_strip_path(id, source)):
-			var next: String = SUBSTITUTES.get(source, "")
-			if next.is_empty() or next == anim:
-				break
-			source = next
+		var source := _substitute_for(id, anim)
+		if source.is_empty():
+			# 그림이 하나도 없다. 이 종은 통째로 색 사각형으로 간다 —
+			# 한 동작만 사각형이면 걷다가 갑자기 네모가 된다.
+			return {"frames": PlaceholderArt.body_frames(species, canvas), "real": false, "missing": []}
 		if source != anim:
 			missing.append(anim)
 		for texture in _slice(_strip_path(id, source), canvas):
@@ -269,8 +290,12 @@ static func _strip_path(species_id: String, anim: String) -> String:
 
 ## 가로 스트립을 캔버스 폭으로 잘라 프레임 목록을 만든다.
 static func _slice(path: String, canvas: Vector2i) -> Array[Texture2D]:
-	var sheet: Texture2D = load(path)
 	var out: Array[Texture2D] = []
+	if not ResourceLoader.exists(path):
+		return out
+	var sheet: Texture2D = load(path)
+	if sheet == null:
+		return out
 	var count := int(sheet.get_width() / float(canvas.x))
 	for i in maxi(count, 1):
 		var atlas := AtlasTexture.new()

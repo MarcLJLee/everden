@@ -44,8 +44,9 @@ func refresh(state: Dictionary) -> void:
 	else:
 		lines.append("유도: 없음")
 	if gauge.active:
-		lines.append("게이지: %.1f초 (×%.2f — %s)" % [
-			gauge.duration, gauge.factor, ", ".join(gauge.reasons)])
+		lines.append("게이지: %.1f초 (×%.2f — %s)%s" % [
+			gauge.duration, gauge.factor, ", ".join(gauge.reasons),
+			"   ⏸ 멀어져서 멈춤 (줄지는 않는다)" if gauge.paused else ""])
 	else:
 		lines.append("게이지: 대기 — 대상에 붙어 [스페이스]")
 	_label.text = "\n".join(lines)

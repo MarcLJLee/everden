@@ -232,17 +232,38 @@ func _test_gauge_uninterruptible(field) -> void:
 	gauge.start(animal, dog, "낮")
 	_check("게이지가 시작된다", gauge.active)
 
+	# 붙어 있으면 끝까지 찬다. 방해 요소도 실패 조건도 없다.
 	var completed := false
 	for i in 400:
-		# 게이지 도중에 대상이 멀어지고 플레이어가 딴 데로 가도 —
-		animal.position += Vector2(500, 500)
-		field.player.position += Vector2(-200, 0)
-		if gauge.update(0.02):
+		if gauge.update(0.02, 0.0):
 			completed = true
 			break
 		if not gauge.active:
 			break
-	_check("멀어져도 게이지가 끊기지 않고 끝까지 찬다", completed)
+	_check("붙어 있으면 게이지가 끝까지 찬다", completed)
+
+	# ★ 점유 시간 게이지다 — 자리를 비우면 차오르지 않는다.
+	#   다만 **멈출 뿐 줄지 않는다.** 되돌릴 수 없는 실패를 만들지 않는다(원칙 2).
+	gauge.cancel()
+	gauge.start(animal, dog, "낮")
+	for i in 20:
+		gauge.update(0.02, 0.0)
+	var held: float = gauge.progress
+	var far: float = field.tuning.hold_radius * field.tuning.tile_size + 40.0
+	for i in 60:
+		gauge.update(0.02, far)
+	_check("멀어지면 게이지가 멈춘다", gauge.paused and is_equal_approx(gauge.progress, held),
+		"%.3f → %.3f" % [held, gauge.progress])
+	_check("멀어져도 게이지가 줄지는 않는다", gauge.progress >= held - 0.001)
+	_check("멀어져도 취소되지 않는다 — 실패가 아니다", gauge.active)
+	gauge.update(0.02, 0.0)
+	_check("돌아오면 이어서 찬다", not gauge.paused and gauge.progress > held)
+	var finished := false
+	for i in 400:
+		if gauge.update(0.02, 0.0):
+			finished = true
+			break
+	_check("결국 완료된다 — 시작한 게이지는 반드시 끝난다", finished)
 
 	gauge.cancel()
 	gauge.start(animal, dog, "낮")
@@ -478,24 +499,23 @@ func _test_animation_set(field) -> void:
 	_check("모든 액터가 애니메이션 집합을 빠짐없이 갖는다", missing.is_empty(), ", ".join(missing))
 
 	# 유도 중 특징 동작을 켜도 색 사각형 액터가 터지지 않는다.
-	# 동료 중에서 찾으면 그 종에 그림이 생기는 순간 검사가 조용히 사라진다 —
-	# 그림 없는 종을 직접 세워서 고정한다.
-	var placeholder: Actor = null
-	for animal in field.sim.animals:
-		if not SpriteLibrary.has_art(String(animal.species.get("id", ""))):
-			placeholder = field.actor_scene.instantiate()
-			field.add_child(placeholder)
-			placeholder.setup(animal.species, field.schema, field.tuning, RandomNumberGenerator.new())
-			break
-	_check("그림 없는 종을 하나 세울 수 있다", placeholder != null)
-	if placeholder != null:
-		_check("그 종은 정말 색 사각형이다", not placeholder.has_drawn_art)
-		placeholder.play_special = true
-		placeholder.move_vector = Vector2.ZERO
-		await process_frame
-		_check("그림 없는 액터도 특징 동작을 재생할 수 있다",
-			placeholder.get_node("Body/BodySprite").animation == "special")
-		placeholder.queue_free()
+	# 실제 종에서 고르면 그 종에 그림이 생기는 순간 검사가 사라진다 —
+	# 실제로 모든 종에 idle 이 들어오면서 그렇게 사라졌다. 없는 종을 지어서 고정한다.
+	var nobody := {
+		"id": "_그림없는종", "name": "없음", "diet": "잡식", "activity": "주행성",
+		"size_class": "중", "senses": [], "traits": [], "habitat": [],
+		"stats_range": {}, "sprite_set": {"eye_style": "round", "head_anchor": [16, 3]},
+	}
+	var placeholder: Actor = field.actor_scene.instantiate()
+	field.add_child(placeholder)
+	placeholder.setup(nobody, field.schema, field.tuning, RandomNumberGenerator.new())
+	_check("그림 없는 종은 색 사각형으로 떨어진다", not placeholder.has_drawn_art)
+	placeholder.play_special = true
+	placeholder.move_vector = Vector2.ZERO
+	await process_frame
+	_check("그림 없는 액터도 특징 동작을 재생할 수 있다",
+		placeholder.get_node("Body/BodySprite").animation == "special")
+	placeholder.queue_free()
 	await process_frame
 
 

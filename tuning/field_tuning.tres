@@ -21,6 +21,7 @@ reveal_radius = 3.0
 guide_radius = 10.0
 activation_radius = 26.0
 interact_radius = 1.5
+hold_radius = 2.6
 base_gauge_time = 3.0
 mismatch_factor = 1.5
 camera_zoom = 2.0

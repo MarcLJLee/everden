@@ -229,10 +229,12 @@ func _test_gauge_uninterruptible(field) -> void:
 	var dog: Actor = _find_companion(field, "dog")
 	var gauge: Gauge = field.gauge
 	gauge.cancel()
+	animal.invite_progress = 0.0
 	gauge.start(animal, dog, "낮")
 	_check("게이지가 시작된다", gauge.active)
 
 	# 붙어 있으면 끝까지 찬다. 방해 요소도 실패 조건도 없다.
+	animal.invite_progress = 0.0
 	var completed := false
 	for i in 400:
 		if gauge.update(0.02, 0.0):
@@ -245,6 +247,7 @@ func _test_gauge_uninterruptible(field) -> void:
 	# ★ 점유 시간 게이지다 — 자리를 비우면 차오르지 않는다.
 	#   다만 **멈출 뿐 줄지 않는다.** 되돌릴 수 없는 실패를 만들지 않는다(원칙 2).
 	gauge.cancel()
+	animal.invite_progress = 0.0   # 앞 시나리오가 채운 것을 물려받지 않게
 	gauge.start(animal, dog, "낮")
 	for i in 20:
 		gauge.update(0.02, 0.0)
@@ -266,10 +269,32 @@ func _test_gauge_uninterruptible(field) -> void:
 	_check("결국 완료된다 — 시작한 게이지는 반드시 끝난다", finished)
 
 	gauge.cancel()
+	animal.invite_progress = 0.0
 	gauge.start(animal, dog, "낮")
 	gauge.update(0.02)
 	gauge.cancel()
 	_check("취소는 명시적으로 눌렀을 때만 된다", not gauge.active and gauge.progress == 0.0)
+
+	# ★ 쏟은 시간은 **개체가** 들고 있다. 다른 아이에게 갔다 와도 이어서 찬다.
+	var other: FieldSim.WildAnimal = _find_animal(field, "otter")
+	gauge.close()
+	animal.invite_progress = 0.0
+	gauge.start(animal, dog, "낮")
+	for i in 15:
+		gauge.update(0.02, 0.0)
+	var kept: float = animal.invite_progress
+	_check("쏟은 시간이 그 개체에 남는다", kept > 0.0, "%.3f" % kept)
+
+	gauge.close()
+	gauge.start(other, dog, "낮")
+	_check("다른 아이에게 가면 게이지가 처음부터", is_zero_approx(gauge.progress))
+	_check("먼저 아이의 시간은 그대로다", is_equal_approx(animal.invite_progress, kept))
+
+	gauge.close()
+	gauge.start(animal, dog, "낮")
+	_check("돌아오면 쏟다 만 자리에서 이어 찬다", is_equal_approx(gauge.progress, kept),
+		"%.3f vs %.3f" % [gauge.progress, kept])
+	gauge.close()
 	await process_frame
 
 

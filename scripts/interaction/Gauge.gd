@@ -29,11 +29,12 @@ func start(animal: FieldSim.WildAnimal, companion: Actor, daypart: String) -> vo
 		return
 	target = animal
 	lead = companion
+	# 전에 쏟다 만 시간이 있으면 그 자리에서 이어 찬다 — 개체가 들고 있다
+	progress = animal.invite_progress
 	var computed := compute_factor(animal.species, companion, daypart, _tuning, animal.quirks, _schema)
 	factor = computed["factor"]
 	reasons = computed["reasons"]
 	duration = _tuning.base_gauge_time * factor
-	progress = 0.0
 	active = true
 
 
@@ -46,6 +47,7 @@ func update(delta: float, distance := -1.0) -> bool:
 	if paused:
 		return false
 	progress += delta / maxf(duration, 0.01)
+	target.invite_progress = minf(progress, 1.0)
 	if progress < 1.0:
 		return false
 	progress = 1.0
@@ -53,14 +55,21 @@ func update(delta: float, distance := -1.0) -> bool:
 	return true
 
 
-## 플레이어가 명시적으로 누른 경우에만 호출된다.
-func cancel() -> void:
+## 게이지 창을 닫는다. **쏟은 시간은 개체에 남는다** — 다시 오면 이어서 찬다.
+## 되돌릴 수 없는 실패를 만들지 않는다(원칙 2)는 여기에도 걸린다.
+func close() -> void:
 	active = false
 	paused = false
 	progress = 0.0
 	target = null
 	lead = null
 	reasons = PackedStringArray()
+
+
+## 플레이어가 명시적으로 취소를 누른 경우. 지금은 창만 닫는다 —
+## 쏟은 시간까지 버리면 그게 되돌릴 수 없는 실패다.
+func cancel() -> void:
+	close()
 
 
 ## 상성 계수. 프로토타입에서 켜는 축은 먹이 유형 + 활동 시간 2개뿐이다. (BRIEF §8)

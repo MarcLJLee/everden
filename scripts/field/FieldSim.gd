@@ -25,6 +25,9 @@ class WildAnimal extends RefCounted:
 	## 멀리서 보던 놈이 가까이 왔을 때 갑자기 빨라지지 않는다.
 	var move_scale := 1.0
 	var quirks: Array = []
+	## 이 개체에 쏟은 점유 시간 (0~1). **게이지가 아니라 개체가 들고 있다** —
+	## 다른 데 갔다 와도 이어서 찰 수 있어야 한다. 한 번 쏟은 시간은 사라지지 않는다.
+	var invite_progress := 0.0
 
 	func is_active() -> bool:
 		return actor != null

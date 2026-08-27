@@ -19,6 +19,8 @@ func _draw() -> void:
 		_draw_puff(puff, float(_state.get("puff_life", 0.45)))
 	if hit != null and not _on_screen(hit.animal.position):
 		_draw_edge_arrow(hit)
+	for partial in _state.get("partial", []):
+		_draw_partial(partial)
 	if gauge.active:
 		_draw_gauge(gauge)
 	_draw_weather(String(_state.get("weather", "맑음")))
@@ -99,6 +101,16 @@ func _draw_sparkles(center: Vector2, progress: float) -> void:
 		var offset := Vector2.RIGHT.rotated(angle) * (14.0 + 5.0 * sin(progress * TAU * 2.0))
 		draw_rect(Rect2(center + offset - Vector2.ONE * 1.5, Vector2.ONE * 3),
 			Color(1.0, 0.97, 0.7, 0.85))
+
+
+## 쏟다 만 아이 위에 작게 남겨둔다. 다시 오면 여기서부터 찬다.
+func _draw_partial(partial: Dictionary) -> void:
+	var anchor := _to_screen(partial["position"]) + Vector2(0, -10)
+	var bar := Vector2(28, 4)
+	var origin := anchor - Vector2(bar.x * 0.5, 0)
+	draw_rect(Rect2(origin - Vector2.ONE, bar + Vector2.ONE * 2), Color(0, 0, 0, 0.45))
+	draw_rect(Rect2(origin, Vector2(bar.x * float(partial["progress"]), bar.y)),
+		Color(0.86, 0.76, 0.44, 0.85))
 
 
 ## 날씨는 눈에 보여야 한다. 감각 배율만 바꾸고 화면이 그대로면 규칙이 숨는다.

@@ -333,10 +333,21 @@ func _update_interaction(delta: float) -> void:
 		player.look_direction = gauge.target.position - player.position
 		if Input.is_action_just_pressed("interact_cancel"):
 			gauge.cancel()  # 취소는 플레이어가 명시적으로 누를 때만
-		elif gauge.update(delta, player.position.distance_to(gauge.target.position)):
+			return
+		if gauge.update(delta, player.position.distance_to(gauge.target.position)):
 			sim.invite(gauge.target)
 			metrics.note_invited()
-			gauge.cancel()
+			gauge.close()
+			return
+		# 멈춰 있는 동안에는 다른 아이에게 갈 수 있다. 점유 중일 때는 못 바꾼다 —
+		# 지금 하고 있는 일이 있는데 딴 데를 누르면 그게 더 이상하다.
+		if not (gauge.paused and Input.is_action_just_pressed("interact")):
+			return
+		var other := _nearest_interactable()
+		if other == null or other == gauge.target:
+			return
+		gauge.close()   # 쏟은 시간은 그 아이에게 남는다
+		gauge.start(other, _lead_companion_for(other), daypart)
 		return
 
 	player.look_direction = Vector2.ZERO
@@ -468,6 +479,7 @@ func _build_state() -> Dictionary:
 		"shallow_count": sim.count_shallow(),
 		"companions": _companion_status(),
 		"clues": _clues,
+		"partial": _partial_invites(),
 		"puffs": _puffs,
 		"puff_life": PUFF_LIFE,
 		"visible_count": _visible_count(),
@@ -486,6 +498,21 @@ func _sense_status() -> String:
 			parts.append("%s %s %.0f타일" % [
 				companion.display_name, sense, guide.reach_tiles(companion, String(sense))])
 	return "   ".join(parts) if not parts.is_empty() else "(데려간 동료 없음)"
+
+
+## 쏟다 만 아이들. 진행은 누적으로 보여야 한다(원칙 3) —
+## 어디까지 했는지 안 보이면 다시 찾아갈 이유가 안 생긴다.
+func _partial_invites() -> Array:
+	var out: Array = []
+	for animal in sim.active_animals():
+		if animal.invite_progress <= 0.01:
+			continue
+		if gauge.active and animal == gauge.target:
+			continue
+		if not animal.actor.visible:
+			continue
+		out.append({"position": animal.actor.head_position(), "progress": animal.invite_progress})
+	return out
 
 
 func _visible_count() -> int:

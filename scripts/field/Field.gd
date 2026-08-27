@@ -290,21 +290,50 @@ func _active_companions() -> Array:
 	return out
 
 
-func _follow_player(_delta: float) -> void:
+## 동료는 평소에 따라오고, **무언가를 잡으면 그쪽으로 앞장선다.**
+##
+## ★ **유도의 방향은 몸이 말한다** (BRIEF §4.5 ★ v3.16). 화면 가장자리 화살표를
+##   그리지 않는다 — 그건 게임이 알려주는 것이지 세계의 사건이 아니다.
+##   개가 그쪽으로 당기는 것을 보고 아이가 따라가는 것, 그게 유도다.
+## ★ 도착하면 **거기서 꼬리를 흔든다** — 특징 동작은 서 있을 때만 나온다.
+##   걸어가는 동안 흔들면 그건 이동이지 "여기야" 가 아니다.
+## ★ **줄에 매인 것처럼 굴어야 한다.** 앞장서되 플레이어에게서 `lead_leash` 만큼만
+##   멀어진다. 그 끝에서 멈춰 돌아본다 — 아이가 따라오면 그만큼 더 간다.
+##   안 그러면 개가 혼자 화면 밖으로 달려가고, 그건 유도가 아니라 이별이다.
+func _follow_player(delta: float) -> void:
 	var active := _active_companions()
+	var leash := tuning.lead_leash * tuning.tile_size
 	for index in active.size():
 		var companion: Actor = active[index]
 		var lateral := tuning.tile_size * 0.9 * (1.0 if index % 2 == 0 else -1.0)
 		var goal := player.position + Vector2(lateral, tuning.follow_distance * tuning.tile_size)
+		goal = lead_goal(companion, goal)
 		var to_goal := goal - companion.position
 		var distance := to_goal.length()
-		if distance < 4.0:
+		companion.speed_tiles = minf(
+			tuning.move_speed * tuning.companion_speed_scale,
+			distance / tuning.tile_size * 2.5)
+		# ⚠️ 한 걸음 안쪽이면 **딱 붙여 세운다.** 지나쳤다 돌아오기를 반복하면
+		#    줄 끝에서 부르르 떨고, 멈춰야 나오는 **꼬리 흔들기가 안 나온다**
+		#    (특징 동작은 서 있을 때만 재생된다).
+		var step := companion.speed_tiles * companion.move_scale * tuning.tile_size * delta
+		if distance <= maxf(step, 2.0):
+			companion.position = goal
 			companion.move_vector = Vector2.ZERO
 		else:
 			companion.move_vector = to_goal.normalized()
-			companion.speed_tiles = minf(
-				tuning.move_speed * tuning.companion_speed_scale,
-				distance / tuning.tile_size * 2.5)
+
+
+## 이 동료가 가려는 자리. 잡은 게 있으면 **그쪽으로, 줄 길이까지만.**
+## ⚠️ 따로 뺀 이유는 회귀가 이걸 직접 재기 위해서다 — 움직인 결과를 재면
+##    다른 판정이 남긴 걸음이 섞여 들어와 값이 깜빡인다.
+func lead_goal(companion: Actor, resting: Vector2) -> Vector2:
+	var hit: GuideSystem.Hit = guide.leads.get(companion)
+	if hit == null:
+		return resting
+	var toward: Vector2 = hit.animal.position - player.position
+	var far: float = minf(toward.length(), tuning.lead_leash * tuning.tile_size)
+	return player.position + toward.normalized() * far
 
 
 func _sync_companion_visibility() -> void:

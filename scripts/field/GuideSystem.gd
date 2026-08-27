@@ -16,6 +16,12 @@ class Hit extends RefCounted:
 ## 유도 아이콘은 가장 가까운 하나만 쓰지만, 무엇이 보이는지는 전부를 봐야 정해진다.
 var detections := {}
 
+## 동료마다 지금 무엇을 잡고 있는가. 동료 → Hit.
+## ★ **유도의 방향은 동료의 몸이 말한다** (BRIEF §4.5 ★ v3.16) — 화살표가 아니라.
+##   그러려면 동료마다 자기가 잡은 것을 알아야 한다. 최단거리 하나로는 못 한다:
+##   개는 저쪽 너구리를, 고양이는 이쪽 청설모를 잡고 있을 수 있다.
+var leads := {}
+
 var _schema: TagSchema = null
 var _tuning: FieldTuning = null
 var _terrain: TerrainMap = null
@@ -63,6 +69,7 @@ func reach_tiles(companion: Actor, sense: String) -> float:
 ## 돌려준 것이 화면 가장자리 화살표와 밸런싱 지표에 쓰인다.
 func update(companions: Array, animals: Array) -> Hit:
 	detections.clear()
+	leads.clear()
 	var best: Hit = null
 	for companion in companions:
 		var hit := _nearest_for(companion, animals)
@@ -71,6 +78,7 @@ func update(companions: Array, animals: Array) -> Hit:
 			companion.hide_sense_icon()
 			companion.look_direction = Vector2.ZERO
 			continue
+		leads[companion] = hit
 		companion.show_sense_icon(hit.sense, _schema.sense_icon(hit.sense))
 		companion.look_direction = hit.animal.position - companion.position
 		if best == null or hit.distance < best.distance:

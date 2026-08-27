@@ -7,7 +7,7 @@
 extends SceneTree
 
 ## 이 아래로 떨어지면 어딘가에서 판정이 조용히 끊긴 것이다.
-const FLOOR := 360
+const FLOOR := 372
 
 var _pass := 0
 var _fail := 0
@@ -1670,6 +1670,105 @@ func _test_weather(field, game) -> void:
 	var before_count := half.collection.size()
 	half.add("squirrel")
 	_check("초대는 그 자리에서 남는다", half.collection.size() == before_count + 1)
+
+	# ★ **유도의 방향은 몸이 말한다** (BRIEF §4.5 ★ v3.16 · 사용자 지적).
+	#   화면 가장자리 화살표를 그리지 않는다 — 그건 게임이 알려주는 것이지
+	#   세계의 사건이 아니다. 개가 그쪽으로 당기는 것을 보고 아이가 따라간다.
+	# ⚠️ Field 의 `_process` 도 같은 일을 한다 — 켜둔 채로 여기서 또 부르면
+	#    동료가 한 프레임에 **두 번** 움직여서 줄 길이를 넘는다. 잠시 끄고 직접 몬다.
+	field.set_process(false)
+	# ⚠️ 앞선 판정이 남긴 걸음을 지운다 — 플레이어가 계속 걸어가면 목표가 움직여서
+	#    동료가 줄 길이를 넘은 것처럼 보인다.
+	field.player.move_vector = Vector2.ZERO
+	# ⚠️ **조건을 못 박는다.** 감각 반경은 날씨·시간대·지형이 다 같이 정한다 —
+	#    안 박아두면 이 판정이 그날 날씨에 따라 깜빡인다 (실제로 그랬다).
+	var clear_sky := {"cloud": 0.1, "fog": 0.0, "rain": 0.0, "snow": 0.0, "wind": 0.2}
+	field.weather.axes = clear_sky.duplicate()
+	field.weather.target = clear_sky.duplicate()
+	field.guide.set_weather_axes(clear_sky)
+	field._apply_daypart("낮")
+	var lead_dog: Actor = _find_companion(field, "dog")
+	var lead_cat: Actor = _find_companion(field, "cat")
+	var smelly_one := _find_animal(field, "raccoon_dog")
+	field.player.position = _find_terrain_point(field, "초원")
+	lead_dog.position = field.player.position
+	lead_cat.position = field.player.position
+	var leash: float = field.tuning.lead_leash * field.tuning.tile_size
+	var ahead := 0.0
+	var toward := 0.0
+	for step in 240:
+		# 날씨가 바뀌면 출현이 다시 정해진다 — 이 판정은 그걸 재는 게 아니므로 붙들어 둔다
+		smelly_one.present = true
+		# ⚠️ 감각이 겨우 닿는 거리에 두지 않는다 — 비가 오면 코가 짧아져서
+		#    판정이 날씨에 따라 깜빡인다. 넉넉히 안쪽에 둔다.
+		# ⚠️ **감각이 겨우 닿는 거리에 두지 않는다.** 150px 에 뒀더니 네 판에 한 번
+		#    감지가 안 잡혀 판정이 깜빡였다 — 어떤 감각으로도 확실히 닿는 자리에 둔다.
+		smelly_one.position = field.player.position + Vector2(60, 0)
+		field.guide.set_weather_axes(clear_sky)
+		field._follow_player(1.0 / 60.0)
+		field.guide.update(field._active_companions(), field.sim.present_animals())
+		await process_frame
+		ahead = maxf(ahead, lead_dog.position.distance_to(field.player.position))
+		toward = maxf(toward, (lead_dog.position - field.player.position)
+			.dot((smelly_one.position - field.player.position).normalized()))
+	_check("동료가 잡은 쪽으로 앞장선다", toward > leash * 0.6,
+		"대상 쪽으로 %.0fpx (줄 %.0fpx)" % [toward, leash])
+	_check("잡은 것이 있어야 이 판정이 뜻을 갖는다", field.guide.leads.has(lead_dog))
+	# ⚠️ **줄에 매인 것처럼.** 안 그러면 개가 혼자 화면 밖으로 달려가고,
+	#    그건 유도가 아니라 이별이다.
+	# ⚠️ **움직인 결과가 아니라 목표를 잰다.** 위치를 재면 앞선 판정이 남긴 걸음이
+	#    섞여 들어와 값이 깜빡인다 — 실제로 61~81px 사이에서 오갔다.
+	var worst_goal := 0.0
+	for companion in field._active_companions():
+		var mark: Vector2 = field.lead_goal(companion, field.player.position)
+		worst_goal = maxf(worst_goal, mark.distance_to(field.player.position))
+	_check("줄 길이를 넘지 않는다", worst_goal <= leash + 0.5,
+		"목표가 %.0fpx (줄 %.0fpx)" % [worst_goal, leash])
+	_check("앞장서긴 한다", ahead > 8.0, "앞선 거리 %.0fpx" % ahead)
+	_check("동료마다 자기가 잡은 것을 안다", field.guide.leads.has(lead_dog))
+
+	# 도착하면 거기서 꼬리를 흔든다 — 특징 동작은 **서 있을 때만** 나온다
+	_check("도착해서 흔든다 — 걸어가면서가 아니라",
+		lead_dog.play_special and lead_dog.move_vector == Vector2.ZERO,
+		"흔듦 %s · 움직임 %s" % [lead_dog.play_special, lead_dog.move_vector])
+
+	# ★ **종을 보지 않는다.** 고양이도 자기가 잡은 쪽으로 가서 거기서 액션을 한다.
+	#   유도는 동료의 감각이 만드는 것이지 그 동료가 개라서가 아니다 (원칙 4).
+	var seeing := _find_animal(field, "squirrel")
+	for step in 200:
+		seeing.present = true
+		seeing.position = field.player.position + Vector2(0, -60)
+		field.guide.set_weather_axes(clear_sky)
+		field._follow_player(1.0 / 60.0)
+		field.guide.update(field._active_companions(), field.sim.present_animals())
+		await process_frame
+	if field.guide.leads.has(lead_cat):
+		var cat_way: Vector2 = lead_cat.position - field.player.position
+		var wanted: Vector2 = (field.guide.leads[lead_cat].animal.position
+			- field.player.position).normalized()
+		_check("고양이도 자기가 잡은 쪽으로 간다", cat_way.dot(wanted) > leash * 0.5,
+			"%.0fpx" % cat_way.dot(wanted))
+		_check("고양이도 거기서 액션을 한다", lead_cat.play_special)
+		_check("액션 그림이 종마다 있다",
+			SpriteLibrary.has_art(lead_cat.species_id))
+
+	# 잡은 게 없으면 제자리로 돌아온다 — 늘 앞서 있으면 그게 유도로 안 읽힌다
+	var was_present := {}
+	for animal in field.sim.animals:
+		was_present[animal] = animal.present
+		animal.present = false
+	for step in 240:
+		field._follow_player(1.0 / 60.0)
+		field.guide.update(field._active_companions(), field.sim.present_animals())
+		await process_frame
+	_check("잡은 게 없으면 곁으로 돌아온다",
+		lead_dog.position.distance_to(field.player.position)
+			< field.tuning.follow_distance * field.tuning.tile_size + 24.0,
+		"%.0fpx" % lead_dog.position.distance_to(field.player.position))
+	_check("곁에 있을 때는 안 흔든다", not lead_dog.play_special)
+	for animal in was_present:
+		animal.present = bool(was_present[animal])
+	field.set_process(true)
 
 	# ★ 실제 날씨는 튀지 않는다 — 지금과 가까운 상태로만 옮겨간다 (사용자 지적)
 	var walker := WeatherSystem.new()

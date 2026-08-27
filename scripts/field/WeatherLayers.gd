@@ -32,7 +32,7 @@ const LAYERS := [
 		"peak": 0.26, "blend": "add", "color": Color(1.0, 0.95, 0.80), "scale": 2,
 		"damp": {"rain": 1.0, "fog": 0.6, "snow": 0.8},
 		"pulse": {"period": 13.0, "amount": 0.45, "phase": 2.1},
-		"phase": Vector2(211.0, 143.0), "daylight": true},
+		"phase": Vector2(211.0, 143.0), "daylight": true, "sun_height": true},
 	{"name": "rays", "file": "light_shaft.png", "axis": "cloud", "base": 0.0, "gain": 0.30,
 		"drift": Vector2(5.0, 1.5), "wind": 18.0, "from": 0.35, "cover": 0.0,
 		"peak": 0.26, "blend": "add", "color": Color(1.0, 0.96, 0.82),
@@ -40,7 +40,7 @@ const LAYERS := [
 		# 그래서 비만큼 깎지 않는다 — 짙어지면 그때 사라진다.
 		"damp": {"rain": 1.0, "fog": 0.6, "snow": 0.8},
 		"pulse": {"period": 8.0, "amount": 0.35, "phase": 0.0},
-		"phase": Vector2(37.0, 61.0), "daylight": true},
+		"phase": Vector2(37.0, 61.0), "daylight": true, "sun_height": true},
 	# ★ 햇살 얼룩 — **구름 그림자와 같은 타일**을 위상만 어긋나게 해서 밝게 더한다.
 	#   구름 사이로 새는 빛이 땅에 지나가는 그림이라 그림자와 짝이고,
 	#   맑을수록 세진다(invert). 새로 그리는 도트가 0 장이고 디더 규칙도 그대로다.
@@ -60,6 +60,28 @@ const LAYERS := [
 	# 폭우는 별개 날씨가 아니라 rain 이 센 것이다 — 센 겹은 늦게 들어온다
 	{"name": "rain_heavy", "file": "rain_heavy.png", "axis": "rain", "base": 0.0, "gain": 0.8,
 		"drift": Vector2(10.0, 380.0), "wind": 210.0, "from": 0.55, "cover": 0.20},
+	# ★ 눈은 **앞뒤로 겹쳐야** 깊이가 산다. 한 겹이면 창문에 붙은 점으로 보인다.
+	#   멀수록 느리고 옅다. 가장 앞 겹은 같은 도트를 2배로 키운 것이라 도트가 늘지 않는다.
+	#   ⚠️ 비와 달리 눈은 **바람에 옆으로 밀린다.** 떨어지는 속도보다 바람이 더 크게 먹는다.
+	#   ⚠️ 눈은 **비가 아니다.** 처음엔 비의 속도를 그대로 줄여 썼더니 직선으로 내려꽂혀
+	#      비처럼 보였다 (사용자 지적). 눈은 훨씬 느리고, 떨어지면서 **좌우로 흔들린다**.
+	#      그 흔들림이 `sway` 다 — 쌓이지 않고 제자리에서 오간다.
+	{"name": "snow_far", "file": "snow_far.png", "axis": "snow", "base": 0.0, "gain": 0.85,
+		"drift": Vector2(2.0, 11.0), "wind": 14.0, "from": 0.0, "cover": 0.003,
+		"sway": {"amount": 5.0, "period": 6.5, "phase": 0.0}},
+	# 같은 도트를 위상만 어긋나게 해서 한 겹 더 — 함박눈은 성기면 함박눈이 아니다
+	{"name": "snow_mid", "file": "snow_far.png", "axis": "snow", "base": 0.0, "gain": 0.9,
+		"drift": Vector2(2.5, 16.0), "wind": 20.0, "from": 0.08, "cover": 0.003,
+		"sway": {"amount": 7.0, "period": 4.7, "phase": 2.4},
+		"phase": Vector2(37.0, 71.0)},
+	{"name": "snow_near", "file": "snow_near.png", "axis": "snow", "base": 0.0, "gain": 0.95,
+		"drift": Vector2(3.5, 23.0), "wind": 28.0, "from": 0.12, "cover": 0.006,
+		"sway": {"amount": 9.0, "period": 3.9, "phase": 1.1}},
+	# 가장 앞 겹은 크고 **흐릿하다** — 초점이 안 맞은 자리라 진하면 얼룩으로 보인다
+	{"name": "snow_big", "file": "snow_near.png", "axis": "snow", "base": 0.0, "gain": 0.5,
+		"drift": Vector2(5.0, 34.0), "wind": 40.0, "from": 0.55, "cover": 0.024, "scale": 2,
+		"sway": {"amount": 13.0, "period": 3.1, "phase": 3.7},
+		"phase": Vector2(53.0, 29.0)},
 ]
 
 var _sprites: Array = []
@@ -130,20 +152,33 @@ func build(only: Array = []) -> void:
 		# 타일을 이어 붙이려면 반복을 켜야 한다. 필터는 Nearest 그대로.
 		sprite.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
 		add_child(sprite)
-		_sprites.append({"node": sprite, "spec": spec})
+		_sprites.append({"node": sprite, "spec": spec, "travel": Vector2.ZERO})
 
 
 ## view 는 지금 화면이 덮는 월드 사각형이다. 겹은 그 위에 딱 맞춰 놓인다.
 ## daylight 는 지금 햇빛의 양(0~1)이다. 밤에 햇살 얼룩이 비치면 안 된다.
-func update(delta: float, axes: Dictionary, view: Rect2, daylight := 1.0) -> void:
+func update(delta: float, axes: Dictionary, view: Rect2, daylight := 1.0,
+		sun_height := 1.0) -> void:
 	_elapsed += delta
 	var wind := float(axes.get("wind", 0.3))
 	for entry in _sprites:
 		var spec: Dictionary = entry["spec"]
 		var sprite: Sprite2D = entry["node"]
+		# ⚠️ 흐른 양은 **더해서 쌓는다.** 예전엔 `속도 × 경과시간` 으로 매번 다시 셌는데,
+		#    바람이 변하는 동안 속도가 **경과 시간만큼 뻥튀기**돼서 날씨가 바뀔 때마다
+		#    화면이 확 쓸려 갔다 (사용자 지적). 지금 속도만 보고 한 걸음씩 더한다.
+		#    보이지 않는 겹도 같이 쌓아야 다시 나타날 때 튀지 않는다.
+		var drift: Vector2 = spec["drift"]
+		entry["travel"] += (drift + Vector2(float(spec["wind"]) * wind, 0.0)) * delta
+
 		var alpha := alpha_for(spec, axes)
 		if bool(spec.get("daylight", false)):
 			alpha *= clampf(daylight, 0.0, 1.0)
+		# ★ 빛줄기는 **점심 무렵에만** 선다 (사용자 지적). 기둥이 수직에서 27° 라
+		#   해가 높이 떠야 나오는 각도다 — 해가 낮게 걸린 시간에 그대로 쏟으면
+		#   각도가 거짓말이 된다. 제곱해서 정오 쪽으로 더 몰아준다.
+		if bool(spec.get("sun_height", false)):
+			alpha *= pow(clampf(sun_height, 0.0, 1.0), 2.0)
 		# ★ 빛은 가만히 있지 않는다. 아주 느리게 숨쉬면 판때기가 공기로 바뀐다.
 		#   겹마다 주기가 어긋나 있어 서로 맞물렸다 풀리면서 산란처럼 보인다.
 		#   ⚠️ 세기만 건드린다 — 무늬를 흔들면 디더가 자글거린다.
@@ -159,10 +194,14 @@ func update(delta: float, axes: Dictionary, view: Rect2, daylight := 1.0) -> voi
 		var color: Color = spec.get("color", Color.WHITE)
 		sprite.modulate = Color(color.r, color.g, color.b, alpha)
 
-		var drift: Vector2 = spec["drift"]
 		# 위상을 어긋나게 두면 같은 타일이라도 빛과 그림자가 겹치지 않는다
-		var travel := drift * _elapsed + Vector2(float(spec["wind"]) * wind * _elapsed, 0.0) \
-			- Vector2(spec.get("phase", Vector2.ZERO))
+		var travel: Vector2 = entry["travel"] - Vector2(spec.get("phase", Vector2.ZERO))
+		# ★ 흔들림은 **쌓지 않는다.** travel 에 더하면 눈이 옆으로 흘러가 버린다 —
+		#   제자리에서 오가야 흔들림이다. 겹마다 주기가 어긋나 있어 통째로 안 움직인다.
+		if spec.has("sway"):
+			var sway: Dictionary = spec["sway"]
+			travel.x += float(sway["amount"]) * sin(TAU * _elapsed / float(sway["period"])
+				+ float(sway.get("phase", 0.0)))
 		# ⚠️ region 을 **빼야** 무늬가 그 방향으로 흐른다.
 		#    더하면 텍스처의 아래쪽을 화면 위에서 샘플링하게 되어 비가 위로 올라간다
 		#    (실제로 그렇게 만들었다). drift 는 이제 **화면에서 보이는 방향**이다.

@@ -111,6 +111,12 @@ func _ready() -> void:
 	_palette_t = 1.0
 	weather.setup(schema, _rng, _terrain_mix())
 	_weather_layers.build()
+	# `godot --path . -- --snow` 로 켜면 눈부터 시작한다. 계절이 없는 동안 눈을 보려는 용도다.
+	if "--snow" in OS.get_cmdline_user_args():
+		var snowy: Dictionary = weather.data.get("presets", {}).get("함박눈", {})
+		if not snowy.is_empty():
+			weather.axes = snowy.duplicate()
+			weather.target = snowy.duplicate()
 	guide.set_weather_axes(weather.axes)
 	_apply_daypart(daypart)
 	_advance_palette(0.0)
@@ -140,7 +146,8 @@ func _process(delta: float) -> void:
 	#    빠르게 달릴 때 진행 방향 가장자리가 빈다.
 	_camera.global_position = player.position
 	_weather_layers.update(delta, weather.axes, weather_view_rect(),
-		float(tuning.daypart_daylight.get(daypart, 1.0)))
+		float(tuning.daypart_daylight.get(daypart, 1.0)),
+		float(tuning.daypart_sun_height.get(daypart, 1.0)))
 	_advance_palette(delta)
 	_apply_eyeshine()
 	_update_interaction(delta)
@@ -413,10 +420,32 @@ func _handle_debug_input() -> void:
 		_toggle_companion(1)
 	if Input.is_action_just_pressed("debug_cycle_weather"):
 		weather._pick_target()   # 다음 날씨로 넘어가는 것을 눈으로 보려고 두는 치트
+	if Input.is_action_just_pressed("debug_cycle_snow"):
+		# 눈은 계절이 생긴 뒤에만 저절로 온다 (weather.json 의 season_note).
+		# 그 전에도 눈으로 확인할 수 있게 열어두는 치트다.
+		_cycle_snow()
 	if Input.is_action_just_pressed("debug_cycle_daypart"):
 		_apply_daypart(DAYPARTS[(DAYPARTS.find(daypart) + 1) % DAYPARTS.size()])
 	if Input.is_action_just_pressed("debug_reset_run"):
 		_restart_run()
+
+
+const SNOW_CHEAT := ["진눈깨비", "눈", "함박눈"]
+
+func _cycle_snow() -> void:
+	var presets: Dictionary = weather.data.get("presets", {})
+	# 지금 목표가 눈이면 다음 단계로, 아니면 처음부터. 끝까지 갔으면 평소 날씨로 돌아간다.
+	var at := -1
+	for i in SNOW_CHEAT.size():
+		if presets.has(SNOW_CHEAT[i]) \
+				and is_equal_approx(float(weather.target.get("snow", 0.0)),
+					float(presets[SNOW_CHEAT[i]].get("snow", 0.0))):
+			at = i
+	var next: String = SNOW_CHEAT[at + 1] if at + 1 < SNOW_CHEAT.size() else ""
+	if next.is_empty() or not presets.has(next):
+		weather._pick_target()
+		return
+	weather.target = (presets[next] as Dictionary).duplicate()
 
 
 ## 날씨 겹을 깔 월드 사각형.

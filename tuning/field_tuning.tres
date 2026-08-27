@@ -36,6 +36,11 @@ daypart_daylight = {
 "밤": 0.0,
 "여명": 0.4
 }
+daypart_sun_height = {
+"낮": 1.0,
+"밤": 0.0,
+"여명": 0.12
+}
 weather_drift_seconds = 22.0
 eyeshine_color = Color(0.98, 0.96, 0.55, 1)
 bounce_height_px = 1

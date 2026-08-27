@@ -914,6 +914,108 @@ func _test_weather(field) -> void:
 		_check("%s 의 배율이 정수다" % spec["name"], is_equal_approx(zoom, floor(zoom))
 			and zoom >= 1.0, "×%.2f" % zoom)
 
+	# ★ 무늬가 흐르는 **속도**는 지금 바람만 봐야 한다.
+	#   예전엔 `속도 × 경과시간` 으로 매번 다시 셌는데, 바람이 변하는 동안 속도가
+	#   경과 시간만큼 뻥튀기돼서 날씨가 바뀔 때마다 화면이 확 쓸려 갔다 (사용자 지적).
+	var bench := WeatherLayers.new()
+	root.add_child(bench)
+	bench.build()
+	var bench_view := Rect2(Vector2.ZERO, Vector2(512, 288))
+	var bench_axes := {"cloud": 0.3, "fog": 0.0, "rain": 0.8, "snow": 0.9, "wind": 0.3}
+	# 원정을 한참 진행시킨다 — 버그는 경과 시간에 비례해 커졌다
+	for i in 18000:
+		bench.update(1.0 / 60.0, bench_axes, bench_view)
+	var worst_jump := 0.0
+	var watched := 0
+	for step in 240:
+		# 바람이 0.3 에서 0.9 로 옮겨가는 동안
+		bench_axes["wind"] = 0.3 + 0.6 * (float(step) / 240.0)
+		var before := {}
+		for entry in bench._sprites:
+			before[entry["spec"]["name"]] = Vector2(entry["node"].region_rect.position)
+		bench.update(1.0 / 60.0, bench_axes, bench_view)
+		for entry in bench._sprites:
+			var moved: float = Vector2(entry["node"].region_rect.position).distance_to(
+				before[entry["spec"]["name"]])
+			worst_jump = maxf(worst_jump, moved)
+			watched += 1
+	_check("바람이 변해도 무늬 속도가 튀지 않는다", worst_jump < 20.0,
+		"한 프레임 최대 %.1fpx (300초 경과 뒤)" % worst_jump)
+	_check("잰 겹이 있다", watched > 0, "%d 회" % watched)
+
+	# ★ 눈은 앞뒤로 겹쳐야 깊이가 산다. 그리고 함박눈에도 화면이 하얘지면 안 된다.
+	var snow_layers := 0
+	for spec in WeatherLayers.LAYERS:
+		if String(spec["axis"]) == "snow":
+			snow_layers += 1
+	_check("눈이 앞뒤로 겹쳐 있다", snow_layers >= 2, "%d 겹" % snow_layers)
+	# ★ 눈은 비가 아니다 — 훨씬 느리게 내리고 좌우로 흔들린다 (사용자 지적)
+	var fastest_snow := 0.0
+	var slowest_rain := 9999.0
+	var swaying := 0
+	for spec in WeatherLayers.LAYERS:
+		var fall: float = float((spec["drift"] as Vector2).y)
+		if String(spec["axis"]) == "snow":
+			fastest_snow = maxf(fastest_snow, fall)
+			if spec.has("sway"):
+				swaying += 1
+		elif String(spec["axis"]) == "rain":
+			slowest_rain = minf(slowest_rain, fall)
+	_check("가장 빠른 눈이 가장 느린 비보다 느리다", fastest_snow < slowest_rain * 0.5,
+		"눈 %.0f · 비 %.0f px/s" % [fastest_snow, slowest_rain])
+	_check("눈 겹은 모두 좌우로 흔들린다", swaying == snow_layers,
+		"%d / %d 겹" % [swaying, snow_layers])
+	# 흔들림은 제자리에서 오가야 한다 — 쌓이면 눈이 옆으로 흘러가 버린다
+	var sway_axes := {"cloud": 0.4, "fog": 0.0, "rain": 0.0, "snow": 1.0, "wind": 0.0}
+	var sway_bench := WeatherLayers.new()
+	root.add_child(sway_bench)
+	sway_bench.build()
+	var swept := 0.0
+	for spec in WeatherLayers.LAYERS:
+		if not spec.has("sway"):
+			continue
+		swept = maxf(swept, float(spec["sway"]["amount"]))
+	var seen_x := {"min": 1e9, "max": -1e9}
+	for i in 1200:
+		sway_bench.update(1.0 / 60.0, sway_axes, bench_view)
+		for entry in sway_bench._sprites:
+			if String(entry["spec"]["name"]) != "snow_near":
+				continue
+			# 아래로 흐르는 몫을 빼면 남는 것이 흔들림이다
+			var only_sway: float = entry["node"].region_rect.position.x \
+				+ float((entry["spec"]["drift"] as Vector2).x) * (float(i) / 60.0)
+			seen_x["min"] = minf(seen_x["min"], only_sway)
+			seen_x["max"] = maxf(seen_x["max"], only_sway)
+	_check("흔들림은 제자리에서 오간다 — 쌓이지 않는다",
+		seen_x["max"] - seen_x["min"] < swept * 2.5 + 4.0,
+		"폭 %.1fpx (흔들림 상한 %.0f)" % [seen_x["max"] - seen_x["min"], swept])
+	sway_bench.queue_free()
+	await process_frame
+	var snowy: float = WeatherLayers.total_cover(
+		{"cloud": 0.4, "fog": 0.18, "rain": 0.0, "snow": 1.0, "wind": 0.24})
+	_check("함박눈에도 화면이 덮이지 않는다", snowy < 0.4, "%.0f%% 덮임" % (snowy * 100.0))
+	_check("함박눈은 눈에 보인다", snowy > 0.05, "%.1f%%" % (snowy * 100.0))
+
+	# ★ 빛줄기는 점심 무렵에만 선다 — 기둥이 수직에서 27° 라 해가 높이 떠야 나온다
+	var noon_alpha := 0.0
+	var dusk_alpha := 0.0
+	var lit := {"cloud": 0.26, "fog": 0.0, "rain": 0.0, "snow": 0.0, "wind": 0.3}
+	bench.update(0.0, lit, bench_view, 1.0, 1.0)
+	for entry in bench._sprites:
+		if String(entry["spec"]["name"]) == "rays":
+			noon_alpha = entry["node"].modulate.a if entry["node"].visible else 0.0
+	bench.update(0.0, lit, bench_view,
+		float(field.tuning.daypart_daylight["여명"]),
+		float(field.tuning.daypart_sun_height["여명"]))
+	for entry in bench._sprites:
+		if String(entry["spec"]["name"]) == "rays":
+			dusk_alpha = entry["node"].modulate.a if entry["node"].visible else 0.0
+	_check("빛줄기는 낮에 선다", noon_alpha > 0.15, "%.3f" % noon_alpha)
+	_check("여명에는 빛줄기가 거의 없다", dusk_alpha < noon_alpha * 0.05,
+		"낮 %.3f → 여명 %.3f" % [noon_alpha, dusk_alpha])
+	bench.queue_free()
+	await process_frame
+
 	# ★ 실제 날씨는 튀지 않는다 — 지금과 가까운 상태로만 옮겨간다 (사용자 지적)
 	var walker := WeatherSystem.new()
 	walker.setup(schema, RandomNumberGenerator.new(), {"초원": 2000, "숲": 600})

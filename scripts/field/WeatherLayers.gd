@@ -24,9 +24,22 @@ const LAYERS := [
 	# ★ 빛줄기 — 구름 사이로 쏟아지는 선형 빛. 빛이 닿는 자리가 화사하게 빛난다.
 	#   구름이 **아주 없으면 안 생긴다** — 새어 나올 틈이 있어야 줄기가 된다.
 	#   그래서 세기가 구름 중간에서 가장 크다(peak).
-	{"name": "rays", "file": "light_shaft.png", "axis": "cloud", "base": 0.0, "gain": 0.34,
-		"drift": Vector2(5.0, 1.5), "wind": 18.0, "from": 0.0, "cover": 0.0,
+	# ★ 빛은 한 겹이면 판때기로 보인다. **같은 타일을 2배로 키운 먼 겹**을 뒤에 깔고
+	#   다른 속도로 흘리면 굵기가 섞이고 서로 스쳐 지나가면서 산란처럼 읽힌다 (사용자 지적).
+	#   도트는 그대로 한 장이고, 배율은 **정수배** 라 픽셀 규칙도 그대로다.
+	{"name": "rays_far", "file": "light_shaft.png", "axis": "cloud", "base": 0.0, "gain": 0.17,
+		"drift": Vector2(2.0, 0.6), "wind": 7.0, "from": 0.35, "cover": 0.0,
+		"peak": 0.26, "blend": "add", "color": Color(1.0, 0.95, 0.80), "scale": 2,
+		"damp": {"rain": 1.0, "fog": 0.6, "snow": 0.8},
+		"pulse": {"period": 13.0, "amount": 0.45, "phase": 2.1},
+		"phase": Vector2(211.0, 143.0), "daylight": true},
+	{"name": "rays", "file": "light_shaft.png", "axis": "cloud", "base": 0.0, "gain": 0.30,
+		"drift": Vector2(5.0, 1.5), "wind": 18.0, "from": 0.35, "cover": 0.0,
 		"peak": 0.26, "blend": "add", "color": Color(1.0, 0.96, 0.82),
+		# 안개는 빛줄기를 오히려 **보이게** 한다 (빛이 물방울에 걸려야 줄기가 보인다).
+		# 그래서 비만큼 깎지 않는다 — 짙어지면 그때 사라진다.
+		"damp": {"rain": 1.0, "fog": 0.6, "snow": 0.8},
+		"pulse": {"period": 8.0, "amount": 0.35, "phase": 0.0},
 		"phase": Vector2(37.0, 61.0), "daylight": true},
 	# ★ 햇살 얼룩 — **구름 그림자와 같은 타일**을 위상만 어긋나게 해서 밝게 더한다.
 	#   구름 사이로 새는 빛이 땅에 지나가는 그림이라 그림자와 짝이고,
@@ -35,6 +48,8 @@ const LAYERS := [
 	{"name": "sun", "file": "cloud_shadow.png", "axis": "cloud", "base": 0.0, "gain": 0.19,
 		"drift": Vector2(7.0, 2.0), "wind": 26.0, "from": 0.0, "cover": 0.0,
 		"invert": true, "blend": "add", "color": Color(1.0, 0.93, 0.7),
+		"damp": {"rain": 1.0, "fog": 1.0, "snow": 0.8},
+		"pulse": {"period": 17.0, "amount": 0.2, "phase": 1.3},
 		"phase": Vector2(151.0, 97.0), "daylight": true},
 	{"name": "cloud", "file": "cloud_shadow.png", "axis": "cloud", "base": 0.06, "gain": 0.34,
 		"drift": Vector2(7.0, 2.0), "wind": 26.0, "from": 0.0, "cover": 0.53},
@@ -65,7 +80,16 @@ static func alpha_for(spec: Dictionary, axes: Dictionary) -> float:
 	var from: float = float(spec["from"])
 	# from 위에서만 들어오는 겹이 있다 (폭우는 비가 센 것이다)
 	var strength: float = 0.0 if raw <= from else (raw - from) / maxf(1.0 - from, 0.01)
-	return clampf(float(spec["base"]) + strength * float(spec["gain"]), 0.0, 1.0)
+	var value: float = float(spec["base"]) + strength * float(spec["gain"])
+	# ★ **다른 축이 끄는 겹이 있다.** 해가 드는 연출은 구름만 보고 정하면 안 된다 —
+	#   비나 안개가 끼면 직사광이 없으므로 빛줄기도 햇살 얼룩도 사라져야 한다 (사용자 지적).
+	#   축을 곱해서 끄므로 "비 오는 날씨" 라는 이름을 만들 필요가 없다 (원칙 4).
+	#   ⚠️ 선형으로 깎으면 비가 꽤 와도 빛이 남는다. **제곱으로 떨어뜨린다** —
+	#      이슬비에는 해가 남고 소나기에는 없다.
+	for axis in spec.get("damp", {}):
+		var wet: float = clampf(float(axes.get(axis, 0.0)), 0.0, 1.0)
+		value *= pow(maxf(1.0 - wet * float(spec["damp"][axis]), 0.0), 2.0)
+	return clampf(value, 0.0, 1.0)
 
 
 ## 이 축 묶음에서 겹들이 화면을 덮는 총량. 1 에 가까우면 아무것도 안 보인다.
@@ -101,6 +125,7 @@ func build(only: Array = []) -> void:
 			material.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 			sprite.material = material
 		sprite.centered = false
+		sprite.scale = Vector2.ONE * float(spec.get("scale", 1))
 		sprite.region_enabled = true
 		# 타일을 이어 붙이려면 반복을 켜야 한다. 필터는 Nearest 그대로.
 		sprite.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
@@ -119,6 +144,15 @@ func update(delta: float, axes: Dictionary, view: Rect2, daylight := 1.0) -> voi
 		var alpha := alpha_for(spec, axes)
 		if bool(spec.get("daylight", false)):
 			alpha *= clampf(daylight, 0.0, 1.0)
+		# ★ 빛은 가만히 있지 않는다. 아주 느리게 숨쉬면 판때기가 공기로 바뀐다.
+		#   겹마다 주기가 어긋나 있어 서로 맞물렸다 풀리면서 산란처럼 보인다.
+		#   ⚠️ 세기만 건드린다 — 무늬를 흔들면 디더가 자글거린다.
+		#   ⚠️ alpha_for 는 날씨만 보게 둔다. 시간이 섞이면 회귀가 잴 수 없는 값이 된다.
+		if spec.has("pulse"):
+			var pulse: Dictionary = spec["pulse"]
+			var wave: float = 0.5 - 0.5 * cos(TAU * _elapsed / float(pulse["period"])
+				+ float(pulse.get("phase", 0.0)))
+			alpha *= 1.0 - float(pulse["amount"]) * wave
 		sprite.visible = alpha > 0.01
 		if not sprite.visible:
 			continue
@@ -134,4 +168,8 @@ func update(delta: float, axes: Dictionary, view: Rect2, daylight := 1.0) -> voi
 		#    (실제로 그렇게 만들었다). drift 는 이제 **화면에서 보이는 방향**이다.
 		# ⚠️ 정수 픽셀로만. 반픽셀이면 디더가 자글거린다.
 		sprite.position = view.position.floor()
-		sprite.region_rect = Rect2((view.position - travel).floor(), view.size.ceil())
+		# ⚠️ 키운 겹은 **키운 만큼 좁게 오려야** 같은 넓이를 덮는다.
+		#    나눈 뒤에 floor 하므로 화면에서는 여전히 정수 픽셀에 떨어진다.
+		var zoom := float(spec.get("scale", 1))
+		sprite.region_rect = Rect2(((view.position - travel) / zoom).floor(),
+			(view.size / zoom).ceil())

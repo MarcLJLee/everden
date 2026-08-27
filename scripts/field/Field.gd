@@ -421,13 +421,22 @@ func _handle_debug_input() -> void:
 
 ## 날씨 겹을 깔 월드 사각형.
 ##
-## ⚠️ 화면 크기를 그대로 쓰면 **가장자리에서 겹이 끝난다**. 실제로 그렇게 만들었다 —
-##    창을 늘리거나 종횡비가 기준과 어긋나면 뷰포트가 기준 해상도보다 커지는데
-##    겹은 기준값으로 깔려서 화면 오른쪽이 맨땅으로 남았다 (사용자 지적).
+## ⚠️ **카메라가 실제로 보는 곳에 깐다.** `global_position` 은 카메라가 *가려는* 곳이지
+##    보고 있는 곳이 아니다 — 맵 끝에서는 `limit_*` 이 잡아 세우고, 달리는 동안은
+##    `position_smoothing` 이 뒤처진다. 플레이어 위치로 깔았더니 구석에서 화면 한쪽이
+##    맨땅으로 남았다 (사용자 지적). `get_screen_center_position()` 이 둘 다 반영한다.
+## ⚠️ 화면 크기를 그대로 쓰면 **가장자리에서 겹이 끝난다**. 창 종횡비가 기준과 어긋나면
+##    뷰포트가 기준 해상도보다 커지는데 겹은 기준값으로 깔린다.
 ##    타일 반복이라 넓게 까는 값은 공짜다. 넉넉히 덮는다.
 func weather_view_rect() -> Rect2:
 	var half := get_viewport_rect().size / (2.0 * tuning.camera_zoom) * WEATHER_MARGIN
-	return Rect2(_camera.global_position - half, half * 2.0)
+	return Rect2(_camera.get_screen_center_position() - half, half * 2.0)
+
+
+## 카메라가 지금 실제로 비추는 월드 사각형. 겹이 이걸 덮는지 회귀로 잰다.
+func camera_visible_rect() -> Rect2:
+	var size := get_viewport_rect().size / tuning.camera_zoom
+	return Rect2(_camera.get_screen_center_position() - size * 0.5, size)
 
 
 func _apply_daypart(next: String) -> void:

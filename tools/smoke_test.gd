@@ -777,21 +777,65 @@ func _test_weather(field) -> void:
 	# ★ 겹은 **화면보다 넓게** 깔린다. 좁게 깔았더니 오른쪽 절반이 맨땅이었다 (사용자 지적).
 	#   창 종횡비가 기준과 어긋나면 뷰포트가 기준 해상도보다 커지므로 여유가 필요하다.
 	var view: Rect2 = field.weather_view_rect()
-	var screen: Vector2 = field.get_viewport_rect().size / field.tuning.camera_zoom
+	var screen: Vector2 = field.camera_visible_rect().size
 	_check("날씨 겹이 화면보다 넓게 깔린다", view.size.x > screen.x * 1.25
 		and view.size.y > screen.y * 1.25,
 		"겹 %s · 화면 %s" % [view.size, screen])
-	# ⚠️ 카메라를 겹보다 **나중에** 옮기면 겹이 한 프레임 늦게 따라와
-	#    빠르게 달릴 때 진행 방향 가장자리가 빈다. 순서를 지키는지 딴 판을 하나 세워 잰다
-	#    (이 필드는 _process 가 꺼져 있어 카메라가 멈춰 있다).
+	# ★ 진짜 지켜야 하는 것은 **겹이 화면을 남김없이 덮는가** 하나다.
+	#   플레이어 위치에 깔았더니 맵 구석에서 한쪽이 맨땅으로 남았다 (사용자 지적) —
+	#   카메라는 맵 끝에서 멈추고(limit_*) 달리는 동안 뒤처지는데(smoothing)
+	#   겹만 플레이어를 따라갔기 때문이다.
+	#   이 필드는 _process 가 꺼져 있으므로 딴 판을 하나 세워 실제로 움직여 본다.
 	var live: Node2D = load("res://scenes/field/Field.tscn").instantiate()
 	root.add_child(live)
+	# ⚠️ 판이 둘이면 **나중에 들어온 카메라는 current 가 되지 않는다.** 그대로 두면
+	#    get_screen_center_position() 이 (0,0) 을 돌려주고, 겹과 화면이 **둘 다** 원점을
+	#    보게 되어 아래 판정이 늘 통과한다. 조용히 넘어가는 테스트가 이렇게 생긴다.
+	live.get_node("Camera2D").make_current()
 	await process_frame
-	live.player.position += Vector2(400.0, 260.0)
+	var moved_from: Vector2 = live.camera_visible_rect().get_center()
+	var corners := [Vector2(8.0, 8.0), Vector2(-4000.0, -4000.0), Vector2(4000.0, 4000.0)]
+	for corner in corners:
+		live.player.position = corner
+		# 부드러운 추종이 자리를 잡을 때까지
+		for i in 40:
+			await process_frame
+		_check("맵 구석에서도 겹이 화면을 남김없이 덮는다 %s" % corner,
+			live.weather_view_rect().encloses(live.camera_visible_rect()),
+			"겹 %s · 화면 %s" % [live.weather_view_rect(), live.camera_visible_rect()])
+	# 달리는 중이 가장 사납다 — 카메라가 뒤처진 채로도 덮여야 한다
+	live.player.position = Vector2(600.0, 600.0)
+	for i in 30:
+		await process_frame
+	live.player.position += Vector2(900.0, 0.0)
 	await process_frame
-	_check("겹이 카메라를 한 프레임 늦게 따라가지 않는다",
-		live.weather_view_rect().get_center().distance_to(live.player.position) < 1.0,
-		"%s vs %s" % [live.weather_view_rect().get_center(), live.player.position])
+	_check("달리는 중에도 겹이 화면을 덮는다",
+		live.weather_view_rect().encloses(live.camera_visible_rect()),
+		"겹 %s · 화면 %s" % [live.weather_view_rect(), live.camera_visible_rect()])
+	# 위 판정들이 헛돌지 않았다는 증거 — 카메라가 실제로 움직였는가
+	_check("측정 판의 카메라가 실제로 움직였다",
+		live.camera_visible_rect().get_center().distance_to(moved_from) > 100.0,
+		"%s → %s" % [moved_from, live.camera_visible_rect().get_center()])
+
+	# ★ 비와 구름은 **카메라가 아니라 땅에 붙는다.** 카메라는 오려내는 창일 뿐이다.
+	#   화면에 고정하면 걸음을 멈춰도 빗줄기가 따라와서 유리창에 그린 것처럼 보인다.
+	#   판정: 위치가 달라도 같은 월드 지점이 같은 텍스처 좌표를 본다.
+	# 월드 한 점 p 가 보는 텍스처 좌표는 (p - node.position)/배율 + region.position 이다.
+	# 땅에 붙었다면 이 값이 화면이 어디에 있든 같다. 키운 겹은 배율을 나눠줘야 맞다.
+	var anchored := true
+	var drifted := 0
+	for entry in live.get_node("Weather")._sprites:
+		var sprite: Sprite2D = entry["node"]
+		var zoom: float = maxf(sprite.scale.x, 0.001)
+		var before: Vector2 = sprite.region_rect.position - sprite.position / zoom
+		live._weather_layers.update(0.0, live.weather.axes,
+			live.weather_view_rect().grow(-40.0), 1.0)
+		var after: Vector2 = sprite.region_rect.position - sprite.position / zoom
+		if before.distance_to(after) > 1.0:
+			anchored = false
+		drifted += 1
+	_check("날씨 무늬는 카메라가 아니라 땅에 붙는다", anchored)
+	_check("잰 겹이 하나라도 있다", drifted > 0, "%d 겹" % drifted)
 	live.queue_free()
 	await process_frame
 
@@ -817,6 +861,58 @@ func _test_weather(field) -> void:
 			"%.1f%% 가 빛" % (fraction * 100.0))
 		_check("빛이 닿지 않는 자리가 있다 — 기둥에 끝이 있다", empty_columns > 0,
 			"빈 열 %d / %d" % [empty_columns, shaft.get_width()])
+
+	# ★ 해가 드는 연출은 **구름만 보고 정하면 안 된다** (사용자 지적).
+	#   구름이 거의 없으면 새어 나올 틈이 없고, 비가 오면 직사광 자체가 없다.
+	var ray_spec := {}
+	for spec in WeatherLayers.LAYERS:
+		if String(spec["name"]) == "rays":
+			ray_spec = spec
+	_check("빛줄기 겹이 있다", not ray_spec.is_empty())
+	if not ray_spec.is_empty():
+		var none: float = WeatherLayers.alpha_for(ray_spec, {"cloud": 0.04})
+		var some: float = WeatherLayers.alpha_for(ray_spec, {"cloud": 0.26})
+		var full: float = WeatherLayers.alpha_for(ray_spec, {"cloud": 0.92})
+		_check("구름이 거의 없으면 빛줄기가 없다 — 새어 나올 틈이 없다",
+			is_zero_approx(none), "%.3f" % none)
+		_check("구름이 꽉 차도 빛줄기가 없다", is_zero_approx(full), "%.3f" % full)
+		_check("그 사이에서 가장 세다", some > 0.2, "%.3f" % some)
+		var rainy: float = WeatherLayers.alpha_for(ray_spec, {"cloud": 0.26, "rain": 0.6})
+		_check("비가 오면 빛줄기가 거의 없다", rainy < some * 0.25,
+			"맑음 %.3f → 비 %.3f" % [some, rainy])
+		var light_rain: float = WeatherLayers.alpha_for(ray_spec, {"cloud": 0.26, "rain": 0.15})
+		_check("이슬비에는 해가 남는다 — 껐다 켜지지 않는다",
+			light_rain > rainy and light_rain < some, "%.3f" % light_rain)
+		if not sun_spec.is_empty():
+			_check("비 오는 날에는 햇살 얼룩도 없다",
+				WeatherLayers.alpha_for(sun_spec, {"cloud": 0.26, "rain": 0.6})
+					< WeatherLayers.alpha_for(sun_spec, {"cloud": 0.26}) * 0.25)
+
+	# ★ 빛이 숨쉬는 것은 연출이지 깜빡임이 아니다. 주기가 짧아지면 스트로브가 된다.
+	var pulsing := 0
+	for spec in WeatherLayers.LAYERS:
+		if not spec.has("pulse"):
+			continue
+		pulsing += 1
+		var pulse: Dictionary = spec["pulse"]
+		_check("%s 의 숨쉬기가 느리다" % spec["name"], float(pulse["period"]) >= 6.0,
+			"주기 %.1f초" % float(pulse["period"]))
+		_check("%s 의 숨쉬기가 빛을 끄지는 않는다" % spec["name"],
+			float(pulse["amount"]) < 0.6, "%.2f" % float(pulse["amount"]))
+	_check("숨쉬는 겹이 있다", pulsing >= 2, "%d 겹" % pulsing)
+	# 주기가 서로 어긋나야 맞물렸다 풀리면서 산란처럼 보인다 — 같으면 통째로 껌뻑인다
+	var periods := {}
+	for spec in WeatherLayers.LAYERS:
+		if spec.has("pulse"):
+			periods[float(spec["pulse"]["period"])] = true
+	_check("겹마다 숨쉬는 주기가 다르다", periods.size() == pulsing,
+		"%d 겹에 주기 %d 종" % [pulsing, periods.size()])
+
+	# 키운 겹은 **정수배** 여야 한다 — 실수배로 키우면 도트가 뭉개진다
+	for spec in WeatherLayers.LAYERS:
+		var zoom: float = float(spec.get("scale", 1))
+		_check("%s 의 배율이 정수다" % spec["name"], is_equal_approx(zoom, floor(zoom))
+			and zoom >= 1.0, "×%.2f" % zoom)
 
 	# ★ 실제 날씨는 튀지 않는다 — 지금과 가까운 상태로만 옮겨간다 (사용자 지적)
 	var walker := WeatherSystem.new()

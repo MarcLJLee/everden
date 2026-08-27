@@ -71,4 +71,5 @@ def light_shaft(n=SHAFT_N, slope=SHAFT_SLOPE, beams=SHAFT_BEAMS):
 ```
 
 `weather.json` 의 `light_shaft.tile` 도 512 로 따라가야 한다.
-겹 세기는 구현 쪽에서 `gain` 0.16 → 0.34 로 올렸다 — 기둥이 드문드문해진 만큼 필요했다.
+겹 세기는 구현 쪽에서 `gain` 0.16 → 0.30 으로 올렸다 — 기둥이 드문드문해진 만큼 필요했다.
+같은 타일을 2배로 키운 먼 겹(`rays_far`)을 하나 더 깔고 있으니 파일은 그대로 한 장이면 된다.

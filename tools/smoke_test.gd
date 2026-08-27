@@ -7,7 +7,7 @@
 extends SceneTree
 
 ## 이 아래로 떨어지면 어딘가에서 판정이 조용히 끊긴 것이다.
-const FLOOR := 285
+const FLOOR := 310
 
 var _pass := 0
 var _fail := 0
@@ -59,7 +59,7 @@ func _run() -> void:
 	await _test_boot()
 	await _test_sense_reach(field)
 	await _test_terrain_walk(field)
-	await _test_weather(field)
+	await _test_weather(field, game)
 	await _test_presence(field)
 	await _test_individuals(field)
 	await _test_roster(field)
@@ -631,13 +631,20 @@ func _test_sense_reach(field) -> void:
 	field.guide.update([dog], [smelly])
 	_check("숲에 있어도 후각은 닿는다", "후각" in field.guide.detected_senses(smelly))
 
-	# 승격 거리가 감각보다 좁으면 감각이 헛돈다
+	# ★ 예전에는 "승격 거리가 가장 먼 감각을 덮는가" 를 쟀다. 저 멀리서 감지된 몸을
+	#   그려야 했기 때문이다 — 그 이유가 사라졌다(§3.14). 지금 지켜야 하는 것은
+	#   **단서가 노드 없이도 나오는가**와 **승격이 보이는 반경보다 넉넉한가** 둘이다.
 	var widest := 0.0
 	for companion in field.companions:
 		for sense in companion.senses:
 			widest = maxf(widest, field.guide.max_reach(companion, String(sense)))
-	_check("풀 AI 승격 거리가 가장 먼 감각을 덮는다", field._promotion_px >= widest,
+	_check("승격은 감각 반경을 안 따라간다 — 몸을 원격으로 그리지 않으니까",
+		field._promotion_px < widest,
 		"승격 %.0fpx / 감각 %.0fpx" % [field._promotion_px, widest])
+	_check("그래도 보이는 반경보다는 넉넉하다 — 화면에 들기 전에 이미 걷고 있어야 한다",
+		field._promotion_px > field.tuning.reveal_radius * field.tuning.tile_size,
+		"승격 %.0fpx / 보임 %.0fpx"
+			% [field._promotion_px, field.tuning.reveal_radius * field.tuning.tile_size])
 	await process_frame
 
 
@@ -705,7 +712,7 @@ func _test_terrain_walk(field) -> void:
 
 
 ## ★ 날씨는 이름이 아니라 축이다 (BRIEF §6.8)
-func _test_weather(field) -> void:
+func _test_weather(field, game) -> void:
 	var schema: TagSchema = field.schema
 	var dog: Actor = _find_companion(field, "dog")
 	var cat: Actor = _find_companion(field, "cat")
@@ -1394,6 +1401,54 @@ func _test_weather(field) -> void:
 		if animal.velocity.length() > 0.01 and absf(animal.velocity.normalized().x) < 0.3:
 			upright += 1
 	_check("놓인 개체도 세로로만 가지 않는다", upright == 0, "%d 마리" % upright)
+
+	# ★ 초대 카드 — **축하지 평가가 아니다** (BRIEF §3.12). 능력치 숫자를 넣지 않는다.
+	var card: CanvasLayer = field.get_node("InviteCard")
+	var deer: Dictionary = DataLoader.load_all(true).species.get("water_deer", {})
+	card.show_for({"species_id": "water_deer", "sex": "male", "stage": "adult", "age_years": 3},
+		deer, true, field.schema)
+	_check("카드가 열린다", card.is_open())
+	var words: Array = []
+	for node in card.get_node("Text").get_children():
+		words.append(String(node.text))
+	var shown := " ".join(words)
+	_check("종 이름이 뜬다", "고라니" in shown, shown)
+	_check("단계가 먼저, 숫자는 곁들이", "어른 · 3살" in shown, shown)
+	_check("설명 두 줄이 뜬다", "엄니" in shown, shown)
+	_check("새 종이면 도감을 알린다", "도감" in shown)
+	# ⚠️ 숫자 능력치가 새어 나오면 "다시 뽑을까" 가 생긴다 (원칙 6)
+	for banned in ["매력", "감각 반경", "속도", "×", "%"]:
+		_check("카드에 '%s' 가 없다" % banned, not (banned in shown), shown)
+	var arts := card.get_node("Art").get_child_count()
+	_check("몸·성별·감각·키캡은 그림이다", arts >= 4, "%d 개" % arts)
+	# 몸은 **정수배로만** 키운다 — 실수배면 도트가 뭉개진다
+	for node in card.get_node("Art").get_children():
+		if node is Sprite2D:
+			var grow: float = node.scale.x
+			_check("정수배로만 키운다", is_equal_approx(grow, floor(grow)), "×%.2f" % grow)
+	# 아기는 숫자를 안 붙인다 — 아이가 묻는 것은 숫자가 아니라 관계다
+	card.show_for({"species_id": "water_deer", "sex": "female", "stage": "baby", "age_years": 0},
+		deer, false, field.schema)
+	var baby_words: Array = []
+	for node in card.get_node("Text").get_children():
+		baby_words.append(String(node.text))
+	var baby_shown := " ".join(baby_words)
+	_check("아기는 '아기' 만 뜬다", "아기" in baby_shown and not ("살" in baby_shown), baby_shown)
+	_check("이미 아는 종이면 도감을 안 알린다", not ("도감" in baby_shown))
+	card.visible = false
+	card._open = false
+
+	# ★ 키캡 — **문장에 키 이름을 넣지 않는다** (§2.10)
+	for action in ["이동", "고르기", "인사·정하기", "그만두기", "메뉴"]:
+		_check("키캡 그림이 있다 — %s" % action, Keycap.texture_for(action) != null)
+	# 오토로드는 이름이 아니라 트리에서 잡는다 — SceneTree 스크립트에서는 이름이 안 잡힌다
+	var was := String(game.last_device)
+	game.last_device = "key"
+	var by_key := Keycap.texture_for("인사·정하기")
+	game.last_device = "pad"
+	var by_pad := Keycap.texture_for("인사·정하기")
+	game.last_device = was
+	_check("패드를 들면 그림이 바뀐다", by_key != by_pad)
 
 	# ★ 실제 날씨는 튀지 않는다 — 지금과 가까운 상태로만 옮겨간다 (사용자 지적)
 	var walker := WeatherSystem.new()

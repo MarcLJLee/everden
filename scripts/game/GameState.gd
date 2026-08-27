@@ -31,14 +31,28 @@ var tutorial_done := false
 ## 회귀가 진짜 저장 파일을 건드리면 안 된다 — 사람이 모아온 아이들이 거기 있다.
 var autosave := true
 
+## 마지막으로 쓴 입력 장치 — "key" 또는 "pad". (BRIEF §2.10)
+## ★ 설정 항목을 만들지 않는다. **패드를 집어 드는 것 자체가 이미 선택이다.**
+##   바뀌는 것은 키캡 **그림 하나뿐**이라 문장도 배치도 안 흔들린다.
+var last_device := "key"
+
 var _next_uid := 1
 var _rng := RandomNumberGenerator.new()
 
 
 func _ready() -> void:
 	_rng.randomize()
+	# 오토로드라 화면이 바뀌어도 계속 듣는다
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	if not load_game():
 		start_new()
+
+
+func _input(event: InputEvent) -> void:
+	if event is InputEventJoypadButton or event is InputEventJoypadMotion:
+		last_device = "pad"
+	elif event is InputEventKey or event is InputEventMouseButton:
+		last_device = "key"
 
 
 ## 첫 판 — **아무도 없다.**

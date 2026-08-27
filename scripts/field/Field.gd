@@ -21,6 +21,7 @@ const WEATHER_MARGIN := 1.6
 @onready var _weather_layers: WeatherLayers = $Weather
 @onready var _snow: SnowField = $Snow
 @onready var _ambient: AmbientLife = $AmbientAir
+@onready var _card: CanvasLayer = $InviteCard
 @onready var _camera: Camera2D = $Camera2D
 @onready var _overlay = $DebugOverlay
 @onready var _modulate: CanvasModulate = $CanvasModulate
@@ -133,7 +134,9 @@ func _process(delta: float) -> void:
 		return
 
 	_handle_debug_input()
-	player.move_vector = Input.get_vector("move_left", "move_right", "move_up", "move_down")
+	# 카드가 떠 있는 동안에는 걸어 다니지 않는다 — 지금은 그 아이를 보는 시간이다
+	player.move_vector = Vector2.ZERO if _card.is_open() \
+		else Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	_follow_player(delta)
 
 	sim.update(delta, player.position)
@@ -379,16 +382,19 @@ func _age_puffs(delta: float) -> void:
 	_puffs = _puffs.filter(func(puff): return puff["age"] < PUFF_LIFE)
 
 
-## 감각이 닿는 곳보다 승격 거리가 좁으면 코가 헛돈다 — 조용히 넘어가지 않는다.
+## 승격은 **보이는 반경**만 덮으면 된다. (BRIEF §3.14)
+##
+## ⚠️ 예전에는 여기서 승격 반경을 **감각 반경까지 되올렸다.** 저 멀리서 감지된 몸을
+##    그려야 했기 때문이다 — 그 이유가 없어졌는데 장치만 남아 있어서, 튜닝을 8타일로
+##    낮춰도 조용히 26타일로 돌아가고 있었다. 안 쓰는 안전장치가 제일 위험하다.
+## ⚠️ 그래도 **보이는 반경보다는 넉넉해야** 한다. 딱 맞으면 몸이 화면에 들어오는 순간
+##    노드가 붙어서, 걷던 자세가 아니라 선 자세로 툭 나타난다.
 func _promotion_radius_px() -> float:
 	var widest := tuning.activation_radius * tuning.tile_size
-	var needed := 0.0
-	for companion in companions:
-		for sense in companion.senses:
-			needed = maxf(needed, guide.max_reach(companion, String(sense)))
-	if needed > widest:
-		push_warning("activation_radius(%.1f타일)가 가장 먼 감각(%.1f타일)보다 좁아 %.1f타일로 올려 씁니다"
-			% [tuning.activation_radius, needed / tuning.tile_size, needed / tuning.tile_size])
+	var needed := tuning.reveal_radius * tuning.tile_size * 1.5
+	if widest < needed:
+		push_warning("activation_radius(%.1f타일)가 보이는 반경(%.1f타일)보다 좁아 %.1f타일로 올려 씁니다"
+			% [tuning.activation_radius, tuning.reveal_radius, needed / tuning.tile_size])
 		return needed
 	return widest
 
@@ -396,6 +402,8 @@ func _promotion_radius_px() -> float:
 # --- 교감 ------------------------------------------------------------------
 
 func _update_interaction(delta: float) -> void:
+	if _card.is_open():
+		return
 	if gauge.active:
 		player.look_direction = gauge.target.position - player.position
 		if Input.is_action_just_pressed("interact_cancel"):
@@ -404,10 +412,17 @@ func _update_interaction(delta: float) -> void:
 		if gauge.update(delta, player.position.distance_to(gauge.target.position)):
 			# ★ 친구가 생긴 순간은 **바로 저장한다** (사용자 지적).
 			#   원정 중에 창을 닫아도 만난 아이가 사라지면 되돌릴 수 없는 손실이다 (원칙 2).
-			Game.add(gauge.target.species.get("id", ""), gauge.target.sex)
+			var species: Dictionary = gauge.target.species
+			var fresh := not (String(species.get("id", "")) in Game.seen)
+			var one := Game.add(String(species.get("id", "")), gauge.target.sex)
+			one["stage"] = gauge.target.stage
+			one["age_years"] = gauge.target.age_years
+			Game.save_game()
 			sim.invite(gauge.target)
 			metrics.note_invited()
 			gauge.close()
+			# 누구를 초대했는지 보여준다. 축하지 평가가 아니다 (§3.12).
+			_card.show_for(one, species, fresh, schema)
 			return
 		# 멈춰 있는 동안에는 다른 아이에게 갈 수 있다. 점유 중일 때는 못 바꾼다 —
 		# 지금 하고 있는 일이 있는데 딴 데를 누르면 그게 더 이상하다.

@@ -27,6 +27,11 @@ class WildAnimal extends RefCounted:
 	var quirks: Array = []
 	## 개체의 성별. 정의 때 한 번 정해지고 원정 내내 바뀌지 않는다. (BRIEF §3.11 1단계)
 	var sex := ""
+	## 단계("baby"/"adult")와 나이(살). 성별과 같이 **정의 때** 정해진다 (§3.15).
+	## ★ 아이가 묻는 것은 숫자가 아니라 **관계**다 — "얘는 엄마 사슴인가, 아기인가?"
+	##   그래서 카드의 주인공은 성별 + 단계고 숫자 나이는 곁들이다.
+	var stage := "adult"
+	var age_years := 1
 	## 이 개체에 쏟은 점유 시간 (0~1). **게이지가 아니라 개체가 들고 있다** —
 	## 다른 데 갔다 와도 이어서 찰 수 있어야 한다. 한 번 쏟은 시간은 사라지지 않는다.
 	var invite_progress := 0.0
@@ -97,6 +102,9 @@ func spawn(target_species: Array, player_position: Vector2) -> void:
 			var animal := WildAnimal.new()
 			animal.species = species
 			animal.sex = String(sexes[i])
+			var grown := Actor.roll_stage(species, _rng)
+			animal.stage = String(grown["stage"])
+			animal.age_years = int(grown["age_years"])
 			animal.position = _spawn_point(species, player_position, min_distance)
 			animal.velocity = _random_velocity()
 			animal.turn_timer = _rng.randf_range(1.0, 4.0)

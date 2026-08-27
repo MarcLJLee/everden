@@ -1,10 +1,11 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/field/Field.gd" id="1_field"]
 [ext_resource type="Script" path="res://scripts/field/Ground.gd" id="2_ground"]
 [ext_resource type="PackedScene" path="res://scenes/actors/Actor.tscn" id="3_actor"]
 [ext_resource type="Resource" path="res://tuning/field_tuning.tres" id="4_tuning"]
 [ext_resource type="PackedScene" path="res://scenes/ui/DebugOverlay.tscn" id="5_overlay"]
+[ext_resource type="Script" path="res://scripts/field/WeatherLayers.gd" id="6_weather"]
 
 [node name="Field" type="Node2D"]
 script = ExtResource("1_field")
@@ -16,6 +17,9 @@ script = ExtResource("2_ground")
 
 [node name="Actors" type="Node2D" parent="."]
 y_sort_enabled = true
+
+[node name="Weather" type="Node2D" parent="."]
+script = ExtResource("6_weather")
 
 [node name="Markers" type="Node2D" parent="."]
 

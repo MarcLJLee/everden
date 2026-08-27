@@ -741,6 +741,19 @@ func _test_weather(field) -> void:
 	_check("사나운 날씨가 기본값이 되지 않는다", not ("폭우" in names) or names.size() >= 5,
 		str(names.keys()))
 
+	# ★ 날씨는 연출이지 장애물이 아니다. 상한에서도 길과 캐릭터가 읽혀야 한다.
+	#   처음엔 구름 그림자를 곱연산으로 통째로 깔아서 **맑은 날에도 화면이 까맸다.**
+	var caps: Dictionary = weather.data.get("caps", {})
+	var worst := {"cloud": float(caps.get("cloud", 0.46)), "fog": float(caps.get("fog", 0.52)),
+		"rain": 1.0, "snow": 0.0, "wind": 1.0}
+	var cover: float = WeatherLayers.total_cover(worst)
+	_check("가장 사나운 날씨에도 화면이 덮이지 않는다", cover < 0.6, "%.0f%% 덮임" % (cover * 100.0))
+	var clear: float = WeatherLayers.total_cover(
+		{"cloud": 0.15, "fog": 0.0, "rain": 0.0, "snow": 0.0, "wind": 0.3})
+	_check("맑은 날은 거의 안 덮인다", clear < 0.15, "%.0f%% 덮임" % (clear * 100.0))
+	# 구름 그림자는 맑은 날에도 켜져 있다 — 날씨가 "없는" 상태를 만들지 않는 장치다
+	_check("맑은 날에도 구름 그림자는 흐른다", clear > 0.02, "%.0f%%" % (clear * 100.0))
+
 	# 어떤 지형도 축을 0 으로 막지 않는다 — 기다림을 강요하게 된다
 	var blocked := PackedStringArray()
 	for terrain_name in schema.weather_bias:

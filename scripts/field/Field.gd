@@ -15,6 +15,7 @@ const DAYPARTS := ["낮", "여명", "밤"]
 @onready var _ground: Node2D = $Ground
 @onready var _actors: Node2D = $Actors
 @onready var _markers: Node2D = $Markers
+@onready var _weather_layers: WeatherLayers = $Weather
 @onready var _camera: Camera2D = $Camera2D
 @onready var _overlay = $DebugOverlay
 @onready var _modulate: CanvasModulate = $CanvasModulate
@@ -98,6 +99,7 @@ func _ready() -> void:
 	_palette_to = _palette_from
 	_palette_t = 1.0
 	weather.setup(schema, _rng, _terrain_mix())
+	_weather_layers.build()
 	guide.set_weather_axes(weather.axes)
 	_apply_daypart(daypart)
 	_advance_palette(0.0)
@@ -121,6 +123,10 @@ func _process(delta: float) -> void:
 	_age_puffs(delta)
 	weather.update(delta, tuning.weather_drift_seconds)
 	guide.set_weather_axes(weather.axes)
+	# 겹은 지금 화면이 덮는 월드 사각형 위에 얹는다. 액터 다음이라 캐릭터 위에도 떨어진다.
+	var half := get_viewport_rect().size / (2.0 * tuning.camera_zoom)
+	_weather_layers.update(delta, weather.axes,
+		Rect2(_camera.global_position - half, half * 2.0))
 	_advance_palette(delta)
 	_apply_eyeshine()
 	_update_interaction(delta)

@@ -1,0 +1,22 @@
+{
+  "_comment": "앰비언트 생물이 **어떻게 움직이는가**. 무엇이 어디 사는지는 설계 세션의 sprites/extracted/ambient/ambient.json 이 정한다 — 여기는 구현이 정하는 값만 둔다. 표를 읽을 뿐이라 생물이 늘어도 코드는 안 고친다.",
+  "motions": {
+    "flutter": "공중에서 갈지자로 떠다닌다. 자주 방향을 바꾸고 위아래로 흔들린다",
+    "dart": "대부분 멈춰 있다가 가끔 짧게 튄다 — 물고기",
+    "crawl": "느리게 한 방향으로 간다. 좀처럼 안 돈다 — 개미",
+    "glide": "화면을 가로질러 곧게 지나가고 사라진다 — 새 그림자. 하늘은 화면 밖이다"
+  },
+  "defaults": {
+    "공중": {"motion": "flutter", "speed": 22.0, "count": 5, "alpha": 1.0, "fps": 7.0},
+    "수면": {"motion": "dart", "speed": 34.0, "count": 4, "alpha": 0.85, "fps": 5.0},
+    "지면": {"motion": "crawl", "speed": 7.0, "count": 6, "alpha": 1.0, "fps": 5.0}
+  },
+  "creatures": {
+    "벌": {"speed": 30.0, "count": 4, "fps": 10.0},
+    "잠자리": {"speed": 28.0, "count": 4, "fps": 9.0},
+    "새그림자": {
+      "motion": "glide", "speed": 46.0, "count": 1, "alpha": 0.28, "fps": 3.0,
+      "_why": "그림자는 외곽선 색으로 찍혀 있다 — 반투명으로 얹으라고 ambient.json 이 이른다"
+    }
+  }
+}

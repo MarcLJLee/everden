@@ -118,6 +118,47 @@ const BAYER4 := [
 	[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5],
 ]
 
+## 바람에 기운 판 한 장. 가로줄을 **정수 픽셀로** 옆으로 민다.
+##
+## ★ 도트 게임에서 바람은 원래 이렇게 만든다 — 새 도트가 필요 없다.
+##   스프라이트를 실제로 회전·전단하면 Nearest 에서 도트가 뭉개진다.
+## ★ 밑동은 안 움직인다. 위로 갈수록 많이 밀린다 — 뿌리가 흔들리면 그건 바람이 아니다.
+static func swayed_texture(source: Texture2D, lean: int) -> ImageTexture:
+	var image := source.get_image()
+	if lean == 0:
+		return ImageTexture.create_from_image(image)
+	var width := image.get_width()
+	var height := image.get_height()
+	var out := Image.create_empty(width, height, false, Image.FORMAT_RGBA8)
+	out.fill(Color(0, 0, 0, 0))
+	# ⚠️ 기준은 캔버스 위가 아니라 **그림의 우듬지**다. 프롭은 캔버스 아래쪽에 붙어 있어서
+	#    캔버스 위를 꼭대기로 잡으면 **가장 많이 밀리는 줄이 빈 줄**이 된다 —
+	#    풀 뭉치(16 캔버스에 아래 10줄만 그려짐)가 그래서 안 흔들려 보였다 (사용자 지적).
+	var crown := 0
+	for y in height:
+		var found := false
+		for x in width:
+			if image.get_pixel(x, y).a > 0.0:
+				found = true
+				break
+		if found:
+			crown = y
+			break
+	var tallest := maxf(float(height - 1 - crown), 1.0)
+	for y in height:
+		# 0(밑동) ~ 1(우듬지). 제곱을 씌워야 아래쪽이 뻣뻣하고 위만 낭창거린다.
+		var up: float = pow(clampf(float(height - 1 - y) / tallest, 0.0, 1.0), 1.7)
+		var shift := int(round(float(lean) * up))
+		for x in width:
+			var from := x - shift
+			if from < 0 or from >= width:
+				continue
+			# ⚠️ 투명 픽셀도 그대로 옮긴다. 건너뛰면 밑동처럼 **한 칸도 안 밀린 줄까지**
+			#    원본과 달라져서, 흔들리지 않는 자리를 흔들린다고 잘못 읽게 된다.
+			out.set_pixel(x, y, image.get_pixel(from, y))
+	return ImageTexture.create_from_image(out)
+
+
 static func light_shaft_texture(tile := 512) -> ImageTexture:
 	# ★ 두 번 틀렸다. 무엇이 틀렸는지 남겨둔다 —
 	#   ① 일정한 사인 격자로 만들었더니 **줄무늬 필터**가 됐다. 박명광선은 규칙적이지 않다.

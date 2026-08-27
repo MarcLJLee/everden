@@ -23,6 +23,28 @@ static func index() -> Dictionary:
 
 
 ## 후각·청각은 지면에 실물이 없다 — 공중에 뜨는 표시다. (HANDOFF §4)
+## 이 종의 암수 이형 파츠. 표에 없으면 빈 사전 — **종 이름으로 분기하지 않는다** (원칙 4).
+## 새 이형 종이 늘어도 코드는 그대로다. (BRIEF §4.9 · palettes.json 의 dimorphism)
+static func dimorphism_for(species_id: String) -> Dictionary:
+	var table: Dictionary = index().get("dimorphism", {}).get("species", {})
+	return table.get(species_id, {})
+
+
+## 이형 파츠 한 장. 경로는 dimorphism 표가 준다.
+static func dimorph_texture(relative: String) -> Texture2D:
+	if relative.is_empty():
+		return null
+	return _texture_from(relative)
+
+
+## 성별 뱃지·짝 표시. 종 수와 무관한 다섯 장이다. (palettes.json 의 pair_ui)
+static func pair_ui_texture(key: String) -> Texture2D:
+	var path := String(index().get("pair_ui", {}).get(key, ""))
+	if path.is_empty():
+		return null
+	return _texture_from(path)
+
+
 static func airborne_clue_texture(sense: String) -> Texture2D:
 	# 냄새·소리 표시는 배경이 아니라 표현이다. 밤이라고 색이 바뀌면 안 읽힌다.
 	return _texture_from(index().get("clue_airborne", {}).get(sense, ""), false)

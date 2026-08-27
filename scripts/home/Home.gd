@@ -124,18 +124,73 @@ func _spawn_residents(species_by_id: Dictionary, view: FieldTuning) -> void:
 		var species: Dictionary = species_by_id[id]
 		if not SpriteLibrary.has_art(id):
 			continue
-		var actor: Actor = load(ACTOR_SCENE).instantiate()
-		_actors.add_child(actor)
-		actor.setup(species, schema, view, _rng)
-		actor.speed_tiles = view.wild_speed
-		actor.confine = yard.confine_resident
-		actor.position = Vector2(
-			_rng.randf_range(yard.yard.position.x + 24, yard.yard.end.x - 24),
-			_rng.randf_range(yard.yard.position.y + 12, yard.yard.end.y - 12))
-		var resident := Resident.new()
-		resident.actor = actor
-		resident.tags = Resident.tags_of(species)
-		residents.append(resident)
+		# 한두 마리씩 — 짝이 있는 종과 혼자인 종이 같은 마당에 있어야
+		# 하트와 반쪽 하트가 나란히 보인다 (BRIEF §2.4)
+		var count: int = _rng.randi_range(1, 2)
+		var sexes := Actor.roll_sexes(count, _rng)
+		for i in count:
+			var actor: Actor = load(ACTOR_SCENE).instantiate()
+			_actors.add_child(actor)
+			actor.setup(species, schema, view, _rng, String(sexes[i]))
+			actor.speed_tiles = view.wild_speed
+			actor.confine = yard.confine_resident
+			actor.position = Vector2(
+				_rng.randf_range(yard.yard.position.x + 24, yard.yard.end.x - 24),
+				_rng.randf_range(yard.yard.position.y + 12, yard.yard.end.y - 12))
+			var resident := Resident.new()
+			resident.actor = actor
+			resident.tags = Resident.tags_of(species)
+			residents.append(resident)
+	_show_pair_marks()
+
+
+## ★ **규칙을 짊어지는 것은 ♂♀ 가 아니라 하트다** (BRIEF §4.9 · 원칙 3).
+##   7살은 기호를 읽어서 아기가 왜 안 생기는지 아는 게 아니라,
+##   **반쪽 하트**를 보고 "얘는 혼자예요" 를 안다. ♂♀ 는 그 다음에 붙는 이름표다.
+## ⚠️ 텍스처는 Sprite2D 로 얹는다 — Control 의 `_draw` 로 그리면 네모가 된다 (RUN.md).
+func _show_pair_marks() -> void:
+	var by_species := {}
+	for resident in residents:
+		var id: String = resident.actor.species_id
+		if not by_species.has(id):
+			by_species[id] = {}
+		by_species[id][resident.actor.sex] = true
+	for resident in residents:
+		var kinds: Dictionary = by_species[resident.actor.species_id]
+		var paired: bool = kinds.size() >= 2
+		var heart := Sprite2D.new()
+		heart.texture = SpriteLibrary.pair_ui_texture("paired" if paired else "alone")
+		heart.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		# ⚠️ 캔버스 높이만큼 올리면 **그림에서 한참 떠서 누구 것인지 안 보인다** —
+		#    캔버스 바닥은 그림의 접지선이 아니다. 그림 윗변(canvas_offset.y)에 붙인다.
+		var above := Vector2(0, float(int(resident.actor.canvas_offset.y) - 4))
+		if heart.texture != null:
+			heart.position = above + Vector2(-5, 0)
+			resident.actor.add_child(heart)
+		var badge := Sprite2D.new()
+		badge.texture = SpriteLibrary.pair_ui_texture(resident.actor.sex)
+		badge.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		if badge.texture != null:
+			badge.position = above + Vector2(4, 1)
+			resident.actor.add_child(badge)
+
+
+## 짝 없이 혼자인 종 → 필드에 반드시 있어야 하는 성별. (BRIEF §2.4 확정 배치)
+## 아직 집과 필드가 상태를 주고받지 않으므로 지금은 쓰이지 않는다 —
+## 수집 목록이 생기면 Field 가 이 값을 FieldSim.pair_needed 로 넘긴다.
+func lonely_species() -> Dictionary:
+	var kinds := {}
+	for resident in residents:
+		var id: String = resident.actor.species_id
+		if not kinds.has(id):
+			kinds[id] = {}
+		kinds[id][resident.actor.sex] = true
+	var needed := {}
+	for id in kinds:
+		if kinds[id].size() >= 2:
+			continue
+		needed[id] = "female" if kinds[id].has("male") else "male"
+	return needed
 
 
 func _spawn_player(view: FieldTuning) -> void:

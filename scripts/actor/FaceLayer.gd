@@ -6,6 +6,7 @@ extends Node2D
 
 var _eye: Sprite2D = null
 var _mouth: Sprite2D = null
+var _dimorph: Sprite2D = null
 
 var _canvas := Vector2i(32, 32)
 var _canvas_offset := Vector2.ZERO
@@ -20,11 +21,14 @@ var _eye_style_texture := {}
 var _shine_color := Color.WHITE
 var _shine_on := false
 var _last_angle := ""
+## 이 종의 암수 이형 (palettes.json 의 dimorphism). 표에 없는 종은 비어 있다.
+var _dimorph_spec := {}
 
 func setup(sprite_set: Dictionary, canvas: Vector2i, canvas_offset: Vector2,
-		drawn_art := false, species_id := "") -> void:
+		drawn_art := false, species_id := "", sex := "") -> void:
 	_eye = get_node("Eye")
 	_mouth = get_node("Mouth")
+	_dimorph = get_node("Dimorph")
 	_canvas = canvas
 	_drawn_art = drawn_art
 	_species_id = species_id
@@ -44,6 +48,17 @@ func setup(sprite_set: Dictionary, canvas: Vector2i, canvas_offset: Vector2,
 	elif _has_mouth:
 		_mouth.texture = PlaceholderArt.mouth_texture(String(sprite_set.get("mouth_style", "small")))
 	_mouth.visible = _has_mouth
+
+	# ★ 암수 이형은 **눈·입과 같은 파츠**다 (BRIEF §4.9). 몸통 시트를 성별로 나누지 않는다 —
+	#   나눴다면 종당 16장이 32장이 됐다. 파츠면 정면·측면 2장이다.
+	#   ⚠️ 표에 그 종이 있는지만 본다. `if species == "water_deer"` 를 쓰면 설계가 틀린 것이다.
+	_dimorph_spec = SpriteLibrary.dimorphism_for(_species_id)
+	if not _dimorph_spec.is_empty() and sex == String(_dimorph_spec.get("shown_on", "")):
+		var files: Dictionary = _dimorph_spec.get("file", {})
+		_dimorph.texture = SpriteLibrary.dimorph_texture(String(files.get("front", "")))
+	else:
+		_dimorph_spec = {}
+	_dimorph.visible = _dimorph.texture != null
 	_apply_expression("기본")
 
 ## facing: "north" | "south" | "east" | "west"
@@ -54,6 +69,8 @@ func apply_facing(facing: String) -> void:
 	var visible_face := facing != "north"
 	_eye.visible = visible_face   # 텍스처가 없으면 _set_eye_texture 가 다시 끈다
 	_mouth.visible = visible_face and _has_mouth
+	# 뒷모습에서는 이형도 숨는다 — 눈·입에 이미 있는 규칙을 그대로 쓴다
+	_dimorph.visible = visible_face and not _dimorph_spec.is_empty()
 	if not visible_face:
 		return
 
@@ -63,6 +80,12 @@ func apply_facing(facing: String) -> void:
 	_place(_eye, _eye_anchor.get(angle, [16, 11]), mirror)
 	if _has_mouth:
 		_place(_mouth, _mouth_anchor.get(angle, [16, 16]), mirror)
+	if not _dimorph_spec.is_empty():
+		var files: Dictionary = _dimorph_spec.get("file", {})
+		_dimorph.texture = SpriteLibrary.dimorph_texture(String(files.get(angle, "")))
+		_dimorph.visible = _dimorph.texture != null
+		if _dimorph.visible:
+			_place(_dimorph, _dimorph_spec.get("anchor", {}).get(angle, [16, 16]), mirror)
 
 
 ## 어두울 때 눈이 되비춘다. (tags.json 의 eyeshine)

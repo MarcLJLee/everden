@@ -25,6 +25,8 @@ class WildAnimal extends RefCounted:
 	## 멀리서 보던 놈이 가까이 왔을 때 갑자기 빨라지지 않는다.
 	var move_scale := 1.0
 	var quirks: Array = []
+	## 개체의 성별. 정의 때 한 번 정해지고 원정 내내 바뀌지 않는다. (BRIEF §3.11 1단계)
+	var sex := ""
 	## 이 개체에 쏟은 점유 시간 (0~1). **게이지가 아니라 개체가 들고 있다** —
 	## 다른 데 갔다 와도 이어서 찰 수 있어야 한다. 한 번 쏟은 시간은 사라지지 않는다.
 	var invite_progress := 0.0
@@ -48,6 +50,8 @@ var _terrain: TerrainMap = null
 var _promotion_px := 0.0
 ## 이 필드가 속한 지역의 생태
 var region := {}
+## 종 id → 이 필드에 반드시 있어야 하는 성별. 집에 혼자인 개체가 채운다. (BRIEF §2.4)
+var pair_needed := {}
 
 
 func setup(root: Node2D, actor_scene: PackedScene, schema: TagSchema, tuning: FieldTuning,
@@ -80,9 +84,19 @@ func spawn(target_species: Array, player_position: Vector2) -> void:
 	var min_distance := _promotion_px
 	var mix := _terrain_mix()
 	for species in target_species:
-		for i in roster_count(species, mix, region, _tuning.animal_count, _rng):
+		var count := roster_count(species, mix, region, _tuning.animal_count, _rng)
+		# ★ **짝 확정 배치** (BRIEF §2.4 · §3.11 1단계의 예외).
+		#   집에 짝 없이 혼자인 개체가 있으면 그 종의 반대 성별이 반드시 정의된다.
+		#   0 마리가 될 수 없다 — 성별 때문에 생기는 영구 벽을 구조적으로 막는다.
+		#   확률을 손보는 게 아니라 **개체가 반드시 있다**. 규칙이 눈에 보인다 (원칙 3).
+		var required := String(pair_needed.get(String(species.get("id", "")), ""))
+		if not required.is_empty():
+			count = maxi(count, 1)
+		var sexes := Actor.roll_sexes(count, _rng, required)
+		for i in count:
 			var animal := WildAnimal.new()
 			animal.species = species
+			animal.sex = String(sexes[i])
 			animal.position = _spawn_point(species, player_position, min_distance)
 			animal.velocity = _random_velocity()
 			animal.turn_timer = _rng.randf_range(1.0, 4.0)
@@ -153,6 +167,20 @@ func roster() -> Dictionary:
 	return out
 
 
+## 종별 암수 구성. **보이지 않는 데이터 필드를 만들지 않는다**(원칙 5) —
+## 이형이 없는 아홉 종은 필드에서 아직 성별이 안 보이므로 최소한 여기 적힌다.
+func sex_mix() -> Dictionary:
+	var out := {}
+	for animal in animals:
+		if animal.invited:
+			continue
+		var name := animal.display_name()
+		if not out.has(name):
+			out[name] = {"male": 0, "female": 0}
+		out[name][animal.sex] = int(out[name].get(animal.sex, 0)) + 1
+	return out
+
+
 func _spawn_point(species: Dictionary, player_position: Vector2, min_distance: float) -> Vector2:
 	if _terrain != null:
 		for attempt in 30:
@@ -211,7 +239,7 @@ func _wander(animal: WildAnimal, delta: float, player_position: Vector2) -> void
 func _promote(animal: WildAnimal) -> void:
 	var actor: Actor = _actor_scene.instantiate()
 	_root.add_child(actor)
-	actor.setup(animal.species, _schema, _tuning, _rng)
+	actor.setup(animal.species, _schema, _tuning, _rng, animal.sex)
 	# 개체값은 이미 굴려뒀다. 다시 굴리면 멀리서 보던 놈이 가까이 오며 딴 놈이 된다.
 	actor.quirks = animal.quirks
 	actor.move_scale = animal.move_scale

@@ -1029,6 +1029,50 @@ func _test_weather(field) -> void:
 	bench.queue_free()
 	await process_frame
 
+	# ★ 성별은 **개체 정의 때** 정해지고 화면에서 보인다 (BRIEF §3.11 1단계 · §4.9)
+	var sex_rng := RandomNumberGenerator.new()
+	sex_rng.seed = 4242
+	var all_same := 0
+	for round_index in 300:
+		var picked := Actor.roll_sexes(4, sex_rng)
+		if picked.count(picked[0]) == picked.size():
+			all_same += 1
+	_check("둘 이상이면 암수가 반드시 섞인다 — 짝 없는 벽을 구조로 막는다",
+		all_same == 0, "%d/300 회 한쪽만" % all_same)
+	_check("한 마리면 한쪽이어도 된다", Actor.roll_sexes(1, sex_rng).size() == 1)
+	var forced := Actor.roll_sexes(3, sex_rng, "female")
+	_check("필요한 성별은 반드시 들어간다 (확정 배치)", "female" in forced, "%s" % [forced])
+	_check("확정 배치라도 나머지는 자유다", Actor.roll_sexes(2, sex_rng, "male").size() == 2)
+
+	# ⚠️ 종 이름으로 분기하지 않는다 (원칙 4) — 표에 있는지만 본다
+	_check("이형은 표가 정한다 — 고라니에 있고", not SpriteLibrary.dimorphism_for("water_deer").is_empty())
+	_check("표에 없는 종에는 없다", SpriteLibrary.dimorphism_for("cat").is_empty())
+	var dimorph: Dictionary = SpriteLibrary.dimorphism_for("water_deer")
+	_check("이형은 한쪽 성별에만 얹힌다", String(dimorph.get("shown_on", "")) in ["male", "female"])
+	_check("이형도 북향에서 숨는다", String(dimorph.get("hide_on", "")) == "north")
+	_check("이형 앵커가 정면·측면 둘 다 있다",
+		dimorph.get("anchor", {}).has("front") and dimorph.get("anchor", {}).has("side"))
+	# 몸통 시트를 성별로 나누지 않는다 — 나눴다면 종당 16장이 32장이 된다
+	_check("이형 그림은 종당 두 장뿐이다", dimorph.get("file", {}).size() == 2,
+		"%d 장" % dimorph.get("file", {}).size())
+
+	# 실제로 수컷에만 붙고 암컷에는 안 붙는가
+	var deer_config: Dictionary = DataLoader.load_all(true).species.get("water_deer", {})
+	var seen_part := {}
+	for sex in ["male", "female"]:
+		var probe: Actor = load("res://scenes/actors/Actor.tscn").instantiate()
+		field.get_node("Actors").add_child(probe)
+		probe.setup(deer_config, field.schema, field.tuning, sex_rng, sex)
+		probe.look_direction = Vector2(0.0, 1.0)
+		seen_part[sex] = probe.get_node("Body/Dimorph").visible
+		probe.queue_free()
+	_check("엄니는 수컷에만 붙는다", seen_part["male"] and not seen_part["female"],
+		"수 %s · 암 %s" % [seen_part["male"], seen_part["female"]])
+
+	# 성별 뱃지·짝 표시는 종 수와 무관한 다섯 장이다
+	for key in ["male", "female", "paired", "alone"]:
+		_check("짝 UI 그림이 있다 — %s" % key, SpriteLibrary.pair_ui_texture(key) != null)
+
 	# ★ 실제 날씨는 튀지 않는다 — 지금과 가까운 상태로만 옮겨간다 (사용자 지적)
 	var walker := WeatherSystem.new()
 	walker.setup(schema, RandomNumberGenerator.new(), {"초원": 2000, "숲": 600})

@@ -34,8 +34,15 @@ func refresh(state: Dictionary) -> void:
 		state["daypart"], state["terrain"], state["promotion_tiles"]])
 	lines.append("감각 반경: %s" % state["senses"])
 	var roster: PackedStringArray = []
+	var mix: Dictionary = state.get("sex_mix", {})
 	for name in state["roster"]:
-		roster.append("%s %d" % [name, state["roster"][name]])
+		# 성별은 개체 정의 때 정해진다 (§3.11 1단계). 필드에서는 고라니만 도트로 보이므로
+		# 나머지는 여기에 적어 둔다 — 보이지 않는 데이터 필드를 만들지 않는다 (원칙 5).
+		var kinds: Dictionary = mix.get(name, {})
+		var tail := ""
+		if not kinds.is_empty():
+			tail = "(♂%d♀%d)" % [int(kinds.get("male", 0)), int(kinds.get("female", 0))]
+		roster.append("%s %d%s" % [name, state["roster"][name], tail])
 	lines.append("이번 원정: %s" % (", ".join(roster) if not roster.is_empty() else "(비었다)"))
 	lines.append("동물: 나와있음 %d/%d · 보임 %d · 단서만 %d · 활성 %d · 얕은시뮬 %d" % [
 		state["present_count"], state["total_count"],

@@ -573,6 +573,7 @@ func _build_state() -> Dictionary:
 		"weather_summary": weather.summary(),
 		"present_count": sim.count_present(),
 		"roster": sim.roster(),
+		"sex_mix": sim.sex_mix(),
 		"total_count": sim.animals.size(),
 		"active_count": sim.count_active(),
 		"shallow_count": sim.count_shallow(),

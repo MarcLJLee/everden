@@ -62,6 +62,8 @@ extends Resource
 ## 시간대를 바꿨을 때 색이 넘어가는 시간(초). 0 이면 툭 튄다.
 @export var daypart_fade: float = 1.2
 ## 어두울 때 눈이 되비추는 색. 빛을 내는 게 아니라 반사라서 노란빛이 돈다.
+## 시간대별 햇빛의 양. 햇살 얼룩이 이 값에 묶인다 — **밤에 햇살이 비치면 안 된다.**
+@export var daypart_daylight: Dictionary = {"낮": 1.0, "여명": 0.4, "밤": 0.0}
 ## 날씨가 다음 상태까지 옮겨가는 데 걸리는 시간(초). 짧으면 스위치처럼 툭 바뀐다.
 @export var weather_drift_seconds: float = 22.0
 @export var eyeshine_color: Color = Color(0.98, 0.96, 0.55)

@@ -126,7 +126,8 @@ func _process(delta: float) -> void:
 	# 겹은 지금 화면이 덮는 월드 사각형 위에 얹는다. 액터 다음이라 캐릭터 위에도 떨어진다.
 	var half := get_viewport_rect().size / (2.0 * tuning.camera_zoom)
 	_weather_layers.update(delta, weather.axes,
-		Rect2(_camera.global_position - half, half * 2.0))
+		Rect2(_camera.global_position - half, half * 2.0),
+		float(tuning.daypart_daylight.get(daypart, 1.0)))
 	_advance_palette(delta)
 	_apply_eyeshine()
 	_update_interaction(delta)

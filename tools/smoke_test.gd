@@ -754,6 +754,23 @@ func _test_weather(field) -> void:
 	# 구름 그림자는 맑은 날에도 켜져 있다 — 날씨가 "없는" 상태를 만들지 않는 장치다
 	_check("맑은 날에도 구름 그림자는 흐른다", clear > 0.02, "%.0f%%" % (clear * 100.0))
 
+	# ★ 햇살 얼룩은 맑을수록 세지고 밤에는 없다
+	var sun_spec := {}
+	for spec in WeatherLayers.LAYERS:
+		if String(spec["name"]) == "sun":
+			sun_spec = spec
+	_check("햇살 얼룩 겹이 있다", not sun_spec.is_empty())
+	if not sun_spec.is_empty():
+		var sunny: float = WeatherLayers.alpha_for(sun_spec, {"cloud": 0.10})
+		var cloudy: float = WeatherLayers.alpha_for(sun_spec, {"cloud": 0.46})
+		_check("맑을수록 햇살이 세다", sunny > cloudy * 1.4,
+			"맑음 %.3f · 흐림 %.3f" % [sunny, cloudy])
+		_check("햇살은 시간대에 묶인다 — 밤엔 없다",
+			bool(sun_spec.get("daylight", false))
+			and is_zero_approx(float(field.tuning.daypart_daylight.get("밤", 1.0))))
+		_check("햇살은 화면을 가리지 않는다 (더하는 빛이다)",
+			is_zero_approx(float(sun_spec.get("cover", 1.0))))
+
 	# ★ 실제 날씨는 튀지 않는다 — 지금과 가까운 상태로만 옮겨간다 (사용자 지적)
 	var walker := WeatherSystem.new()
 	walker.setup(schema, RandomNumberGenerator.new(), {"초원": 2000, "숲": 600})

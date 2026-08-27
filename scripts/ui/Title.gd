@@ -255,7 +255,10 @@ func _point(at) -> Vector2:
 ## 세이브는 아직 없으므로 지금은 언제나 첫 실행이다.
 func _build_menu() -> void:
 	var menu: Dictionary = data.get("menu", {})
-	_items = menu.get("items_first_run", ["NEW GAME", "EXIT"]).duplicate()
+	# ★ 이어할 것이 있으면 **CONTINUE 가 맨 위**다 (title.json 의 items_with_save).
+	#   흔한 쪽이 위에 있어야 아이가 매번 고르지 않아도 된다 — 커서 기본값도 거기다.
+	_items = menu.get("items_with_save" if _has_save() else "items_first_run",
+		["NEW GAME", "EXIT"]).duplicate()
 	if demo_build:
 		# 데모 빌드에서는 첫 항목이 DEMO 다. 새 게임이 아니라 **필드 한 조각**을 보여주는 것이라
 		# NEW GAME 이라고 적으면 없는 것을 약속하게 된다 (세이브도 사파리 층도 아직 없다).
@@ -369,6 +372,8 @@ func _activate(item: String) -> void:
 			_wake()
 
 
+## 이어할 것이 있는가. **파일이 있으면 있다** — 첫 만남 도중에 껐어도 거기서 잇는다.
+## ⚠️ 오토로드를 이름으로 쓰지 않는다: 타이틀이 먼저 뜰 수 있다.
 func _has_save() -> bool:
 	return FileAccess.file_exists(GameState.SAVE_PATH)
 

@@ -7,7 +7,7 @@
 extends SceneTree
 
 ## 이 아래로 떨어지면 어딘가에서 판정이 조용히 끊긴 것이다.
-const FLOOR := 352
+const FLOOR := 360
 
 var _pass := 0
 var _fail := 0
@@ -476,17 +476,19 @@ func _test_boot() -> void:
 		and not timing.is_empty())
 	boot.free()
 
-	# 타이틀 — 첫 실행에는 CONTINUE 가 아예 없다 (BRIEF §6.7)
+	# 타이틀 — 메뉴는 **이어할 것이 있느냐**에 따라 갈린다 (BRIEF §6.7 · title.json)
 	var title: Control = load("res://scenes/ui/Title.tscn").instantiate()
 	root.add_child(title)
 	await process_frame
-	_check("타이틀 메뉴에 CONTINUE 가 없다 (세이브가 없으므로)",
-		not ("CONTINUE" in title._items), str(title._items))
+	var savable := FileAccess.file_exists(GameState.SAVE_PATH)
+	_check("이어할 것이 있을 때만 CONTINUE 가 뜬다",
+		("CONTINUE" in title._items) == savable,
+		"세이브 %s · %s" % [savable, title._items])
 	# 데모 빌드는 새 게임이 아니라 필드 한 조각을 보여준다 — 없는 것을 약속하지 않는다.
-	# 데모가 아니면 NEW GAME 이고, 들어가는 곳은 필드가 아니라 집이다 (BRIEF §2.7).
-	_check("데모 여부에 따라 첫 항목이 갈린다",
-		title._items[0] == ("DEMO" if title.demo_build else "NEW GAME"),
-		"demo=%s %s" % [title.demo_build, title._items])
+	# 데모가 아니면 첫 항목은 이어하기(있으면) 또는 새 게임이고, 들어가는 곳은 집이다.
+	var expected := "DEMO" if title.demo_build else ("CONTINUE" if savable else "NEW GAME")
+	_check("첫 항목이 지금 상태와 맞는다", title._items[0] == expected,
+		"demo=%s 세이브=%s %s" % [title.demo_build, savable, title._items])
 	_check("타이틀에서 고르면 집으로 들어간다",
 		ResourceLoader.exists(title.HOME_SCENE))
 	_check("동무 후보는 title.json 의 candidates 에서 온다",
@@ -1641,6 +1643,33 @@ func _test_weather(field, game) -> void:
 			bank + Vector2(field.tuning.tile_size, 0), field.schema, [])
 		_check("뭍에서 물로는 여전히 못 들어간다",
 			field.terrain.can_stand(pushed, field.schema, []))
+
+	# ★ **이어하기.** 이어할 것이 있으면 CONTINUE 가 맨 위에 뜬다 (title.json).
+	var menu_spec = JSON.parse_string(FileAccess.get_file_as_string(
+		"res://sprites/extracted/ui/title.json"))
+	var menu: Dictionary = (menu_spec as Dictionary).get("menu", {}) if menu_spec is Dictionary else {}
+	_check("세이브가 있을 때 쓸 메뉴를 설계가 넘겼다", menu.has("items_with_save"))
+	_check("첫 판에 쓸 메뉴도 넘겼다", menu.has("items_first_run"))
+	if menu.has("items_with_save"):
+		var with_save: Array = menu["items_with_save"]
+		var first_run: Array = menu["items_first_run"]
+		_check("이어하기가 맨 위다 — 흔한 쪽이 위에 있어야 매번 안 고른다",
+			String(with_save[0]) == "CONTINUE", "%s" % [with_save])
+		_check("첫 판에는 이어하기가 없다", not ("CONTINUE" in first_run), "%s" % [first_run])
+		_check("두 메뉴가 한 항목만 다르다", with_save.size() == first_run.size() + 1)
+
+	# 이어하면 어디로 가는가 — 첫 만남을 안 지났으면 거기서 잇는다
+	var half := GameState.new()
+	half.autosave = false
+	half.start_new()
+	_check("첫 만남 도중에 껐으면 거기서 잇는다", not half.tutorial_done)
+	half.finish_tutorial()
+	_check("첫 만남을 지났으면 집으로 잇는다", half.tutorial_done)
+	# ⚠️ 원정 중에 껐어도 **잃는 것은 없다** — 초대한 아이는 그 자리에서 저장된다 (원칙 2).
+	#    다시 나가면 개체는 새로 정해진다 (§3.11 — 개체 정의는 진입 시 한 번).
+	var before_count := half.collection.size()
+	half.add("squirrel")
+	_check("초대는 그 자리에서 남는다", half.collection.size() == before_count + 1)
 
 	# ★ 실제 날씨는 튀지 않는다 — 지금과 가까운 상태로만 옮겨간다 (사용자 지적)
 	var walker := WeatherSystem.new()

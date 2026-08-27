@@ -15,6 +15,9 @@ const DAYPARTS := ["낮", "여명", "밤"]
 @onready var _ground: Node2D = $Ground
 @onready var _actors: Node2D = $Actors
 @onready var _markers: Node2D = $Markers
+## 날씨 겹을 화면보다 얼마나 넓게 까는가. 1.0 이면 가장자리가 빈다.
+const WEATHER_MARGIN := 1.6
+
 @onready var _weather_layers: WeatherLayers = $Weather
 @onready var _camera: Camera2D = $Camera2D
 @onready var _overlay = $DebugOverlay
@@ -133,16 +136,15 @@ func _process(delta: float) -> void:
 	guide.set_weather_axes(weather.axes)
 	_follow_weather()
 	# 겹은 지금 화면이 덮는 월드 사각형 위에 얹는다. 액터 다음이라 캐릭터 위에도 떨어진다.
-	var half := get_viewport_rect().size / (2.0 * tuning.camera_zoom)
-	_weather_layers.update(delta, weather.axes,
-		Rect2(_camera.global_position - half, half * 2.0),
+	# ⚠️ **카메라를 먼저 옮기고** 재야 한다. 뒤에 옮기면 겹이 한 프레임 늦게 따라와
+	#    빠르게 달릴 때 진행 방향 가장자리가 빈다.
+	_camera.global_position = player.position
+	_weather_layers.update(delta, weather.axes, weather_view_rect(),
 		float(tuning.daypart_daylight.get(daypart, 1.0)))
 	_advance_palette(delta)
 	_apply_eyeshine()
 	_update_interaction(delta)
 	metrics.update(delta)
-
-	_camera.global_position = player.position
 	_overlay.refresh(_build_state())
 
 
@@ -415,6 +417,17 @@ func _handle_debug_input() -> void:
 		_apply_daypart(DAYPARTS[(DAYPARTS.find(daypart) + 1) % DAYPARTS.size()])
 	if Input.is_action_just_pressed("debug_reset_run"):
 		_restart_run()
+
+
+## 날씨 겹을 깔 월드 사각형.
+##
+## ⚠️ 화면 크기를 그대로 쓰면 **가장자리에서 겹이 끝난다**. 실제로 그렇게 만들었다 —
+##    창을 늘리거나 종횡비가 기준과 어긋나면 뷰포트가 기준 해상도보다 커지는데
+##    겹은 기준값으로 깔려서 화면 오른쪽이 맨땅으로 남았다 (사용자 지적).
+##    타일 반복이라 넓게 까는 값은 공짜다. 넉넉히 덮는다.
+func weather_view_rect() -> Rect2:
+	var half := get_viewport_rect().size / (2.0 * tuning.camera_zoom) * WEATHER_MARGIN
+	return Rect2(_camera.global_position - half, half * 2.0)
 
 
 func _apply_daypart(next: String) -> void:

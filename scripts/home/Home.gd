@@ -64,7 +64,8 @@ func _ready() -> void:
 		_place_objects()
 	_spawn_residents(result.species, view)
 	_spawn_player(view)
-	_weather_layers.build()
+	# 집은 맑고 구름이 흐르는 정도만 한다. 비·안개·빛줄기는 없다.
+	_weather_layers.build(["cloud", "sun"])
 	_hud.draw.connect(_hud_draw)
 	for label in [_coin_label, _seat_label]:
 		if ResourceLoader.exists(HANGUL_FONT):
@@ -161,7 +162,7 @@ func _process(delta: float) -> void:
 	for resident in residents:
 		resident.update(delta, objects, yard.yard, _rng)
 	_drift_sky(delta)
-	_weather_layers.update(delta, _sky, Rect2(Vector2.ZERO, Vector2(640, 360)))
+	_weather_layers.update(delta, _sky, Rect2(Vector2(-160, -90), Vector2(960, 540)))
 	_check_gate()
 	_refresh_hud()
 	_hud.queue_redraw()

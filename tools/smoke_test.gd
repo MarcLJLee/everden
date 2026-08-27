@@ -774,16 +774,77 @@ func _test_weather(field) -> void:
 		_check("햇살은 화면을 가리지 않는다 (더하는 빛이다)",
 			is_zero_approx(float(sun_spec.get("cover", 1.0))))
 
+	# ★ 겹은 **화면보다 넓게** 깔린다. 좁게 깔았더니 오른쪽 절반이 맨땅이었다 (사용자 지적).
+	#   창 종횡비가 기준과 어긋나면 뷰포트가 기준 해상도보다 커지므로 여유가 필요하다.
+	var view: Rect2 = field.weather_view_rect()
+	var screen: Vector2 = field.get_viewport_rect().size / field.tuning.camera_zoom
+	_check("날씨 겹이 화면보다 넓게 깔린다", view.size.x > screen.x * 1.25
+		and view.size.y > screen.y * 1.25,
+		"겹 %s · 화면 %s" % [view.size, screen])
+	# ⚠️ 카메라를 겹보다 **나중에** 옮기면 겹이 한 프레임 늦게 따라와
+	#    빠르게 달릴 때 진행 방향 가장자리가 빈다. 순서를 지키는지 딴 판을 하나 세워 잰다
+	#    (이 필드는 _process 가 꺼져 있어 카메라가 멈춰 있다).
+	var live: Node2D = load("res://scenes/field/Field.tscn").instantiate()
+	root.add_child(live)
+	await process_frame
+	live.player.position += Vector2(400.0, 260.0)
+	await process_frame
+	_check("겹이 카메라를 한 프레임 늦게 따라가지 않는다",
+		live.weather_view_rect().get_center().distance_to(live.player.position) < 1.0,
+		"%s vs %s" % [live.weather_view_rect().get_center(), live.player.position])
+	live.queue_free()
+	await process_frame
+
+	# ★ 빛줄기는 **끝이 있는 기둥**이어야 한다. 화면 끝까지 이어지는 사선 격자를
+	#   받았더니 빛이 아니라 줄무늬 필터로 보였다 (사용자 지적).
+	#   도트가 다시 들어와도 이 성질은 지켜져야 하므로 파일을 직접 잰다.
+	var shaft_path := "res://sprites/extracted/weather/light_shaft.png"
+	_check("빛줄기 도트가 있다", ResourceLoader.exists(shaft_path))
+	if ResourceLoader.exists(shaft_path):
+		var shaft: Image = (load(shaft_path) as Texture2D).get_image()
+		var lit := 0
+		var empty_columns := 0
+		for x in shaft.get_width():
+			var column := 0
+			for y in shaft.get_height():
+				if shaft.get_pixel(x, y).a > 0.04:
+					column += 1
+			lit += column
+			if column == 0:
+				empty_columns += 1
+		var fraction := float(lit) / float(shaft.get_width() * shaft.get_height())
+		_check("빛줄기는 드문드문하다 — 격자가 아니다", fraction < 0.20,
+			"%.1f%% 가 빛" % (fraction * 100.0))
+		_check("빛이 닿지 않는 자리가 있다 — 기둥에 끝이 있다", empty_columns > 0,
+			"빈 열 %d / %d" % [empty_columns, shaft.get_width()])
+
 	# ★ 실제 날씨는 튀지 않는다 — 지금과 가까운 상태로만 옮겨간다 (사용자 지적)
 	var walker := WeatherSystem.new()
 	walker.setup(schema, RandomNumberGenerator.new(), {"초원": 2000, "숲": 600})
 	walker.axes = {"cloud": 0.15, "fog": 0.0, "rain": 0.0, "snow": 0.0, "wind": 0.3}
+	# ⚠️ 처음엔 "폭우를 **한 번도** 고르지 않는다" 로 썼다가 200회 중 1회로 깜빡였다.
+	#    룰렛에 0 인 칸은 없으므로 0 회는 보장할 수 없는 값이고, 그런 단언은
+	#    다음에 진짜 회귀가 났을 때 "또 그거겠지" 로 넘기게 만든다.
+	#    보장되는 것은 둘이다 — **먼 날씨는 드물게 고른다**, 그리고 **축은 걸어서 간다**.
 	var jumped := 0
-	for i in 200:
+	for i in 600:
 		walker._pick_target()
 		if float(walker.target.get("rain", 0.0)) >= 0.9:
 			jumped += 1
-	_check("맑음에서 폭우로 바로 가지 않는다", jumped == 0, "%d/200 회" % jumped)
+	_check("맑음에서 폭우를 고르는 일은 드물다", jumped <= 18,
+		"%d/600 회 (%.1f%%)" % [jumped, float(jumped) / 6.0])
+
+	# 골라도 튀지 않는다 — 축은 정해진 속도로 걸어서 간다. 이게 사용자가 말한 "점진적"이다.
+	walker.axes = {"cloud": 0.15, "fog": 0.0, "rain": 0.0, "snow": 0.0, "wind": 0.3}
+	walker.target = {"cloud": 0.9, "fog": 0.3, "rain": 1.0, "snow": 0.0, "wind": 0.9}
+	var worst_step := 0.0
+	for i in 400:
+		var before: Dictionary = walker.axes.duplicate()
+		walker.update(1.0 / 60.0, 22.0)
+		for axis in walker.axes:
+			worst_step = maxf(worst_step, absf(float(walker.axes[axis]) - float(before[axis])))
+	_check("축은 한 프레임에 조금씩만 움직인다", worst_step < 0.02,
+		"가장 큰 한 걸음 %.4f" % worst_step)
 
 	# 멀리 있는 상태일수록 옮겨가는 데 오래 걸린다 (속도가 일정하므로 저절로)
 	walker.axes["rain"] = 0.0

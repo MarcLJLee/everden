@@ -24,7 +24,7 @@ const LAYERS := [
 	# ★ 빛줄기 — 구름 사이로 쏟아지는 선형 빛. 빛이 닿는 자리가 화사하게 빛난다.
 	#   구름이 **아주 없으면 안 생긴다** — 새어 나올 틈이 있어야 줄기가 된다.
 	#   그래서 세기가 구름 중간에서 가장 크다(peak).
-	{"name": "rays", "file": "light_shaft.png", "axis": "cloud", "base": 0.0, "gain": 0.30,
+	{"name": "rays", "file": "light_shaft.png", "axis": "cloud", "base": 0.0, "gain": 0.34,
 		"drift": Vector2(5.0, 1.5), "wind": 18.0, "from": 0.0, "cover": 0.0,
 		"peak": 0.26, "blend": "add", "color": Color(1.0, 0.96, 0.82),
 		"phase": Vector2(37.0, 61.0), "daylight": true},
@@ -79,8 +79,12 @@ static func total_cover(axes: Dictionary) -> float:
 	return 1.0 - left
 
 
-func build() -> void:
+## only 에 이름을 주면 그 겹만 만든다. 집은 **맑고 구름이 흐르는 정도**만 하므로
+## 구름 그림자와 햇살 얼룩만 쓴다 — 마당에 빛줄기가 쏟아지면 그게 날씨가 된다.
+func build(only: Array = []) -> void:
 	for spec in LAYERS:
+		if not only.is_empty() and not (String(spec["name"]) in only):
+			continue
 		var path: String = ROOT + String(spec["file"])
 		var texture: Texture2D = null
 		if ResourceLoader.exists(path):

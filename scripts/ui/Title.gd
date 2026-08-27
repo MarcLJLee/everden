@@ -302,7 +302,7 @@ func _input_dir() -> int:
 
 func _process(delta: float) -> void:
 	_idle += delta
-	_weather_layers.update(delta, weather.axes, Rect2(Vector2.ZERO, Vector2(640, 360)), daylight)
+	_weather_layers.update(delta, weather.axes, Rect2(Vector2(-160, -90), Vector2(960, 540)), daylight)
 	_update_name_label()
 
 	if _state == State.CONFIRM:

@@ -1,4 +1,4 @@
-## 세계 지도 — **어디로**와 **누구랑**, 둘만 고른다. (BRIEF §3.9)
+## 세계 지도 — **어디로**만 고른다. (BRIEF §3.9 ★ v3.17)
 ##
 ## 원정은 목표 사냥이 아니라 **여행**이다. 지도가 그 프레이밍을 짊어진다.
 ##
@@ -8,19 +8,23 @@
 ##
 ## ⚠️ **날씨는 여기 안 들어온다** (§3.12). 예보도 지역별 날씨 표시도 없다 —
 ##    날씨는 나가서 겪는 것이지 고르는 재료가 아니다.
+## ⚠️ **"누구랑" 은 여기서 안 고른다.** 팀 편성 화면으로 넘긴다 —
+##    **한 화면에 결정 하나**다. 지도에 동료 줄을 붙였더니 커서가 2차원이 됐고,
+##    7살에게 그건 무겁다. 흐름은 **지도 → 팀 편성 → 출발**.
 ## ⚠️ **손잡이로 설계하지 않는다.** "코가 좋은 애를 데려가면 유리해요" 같은 말을 하지 않는다.
-##    "누구랑" 은 애착으로 고르는 자리고, 상성은 여러 번 갔다 온 뒤에 몸으로 알게 된다.
-##    그래서 안내는 **"좋아할 거예요"** 까지만이다 — 유불리가 아니라 그 아이의 기분이다.
+##    동료 얼굴에 기쁨 눈을 얹는 것까지가 한계다 — 유불리가 아니라 **그 아이의 기분**이다.
+## ⚠️ `art` 로 표시된 자리에 라벨이 들어가 있으면 **인계 실패**다 (§6.9).
+##    "지형: 물가 · 숲" 처럼 글로 쓰지 않고 **타일 그림**으로, 만난 아이는
+##    이름이 아니라 **얼굴**로 보여준다.
 ## ⚠️ Control 의 `_draw` 로 텍스처·글자를 그리면 네모가 된다. 전부 노드로 얹는다 (RUN.md).
 extends Control
 
 const HANGUL_FONT := "res://fonts/Galmuri11.ttf"
-const FIELD_SCENE := "res://scenes/field/Field.tscn"
+const TEAM_SCENE := "res://scenes/ui/TeamScreen.tscn"
 const HOME_SCENE := "res://scenes/home/Home.tscn"
 const TILE := 8
 const MAP_RECT := Rect2(Vector2(8, 8), Vector2(624, 196))
-## 고르는 자리 — 목적지 · 동료 · 출발
-const ROWS := ["곳", "동료", "출발"]
+## 고르는 것은 하나뿐이다 — 어디로.
 ## ⚠️ **축척이 다르면 표현도 달라진다** (§3.9). 필드에서 "물가" 는 젖은 흙 타일이지만
 ##    지도에서 그것만 깔면 그냥 갈색 땅이다 — 가운데를 **물**로 채워야 물가로 읽힌다.
 const MAP_CORE := {"물가": "extra/water_0"}
@@ -30,13 +34,8 @@ const MAP_CORE := {"물가": "extra/water_0"}
 @onready var _text: Control = $Text
 
 var _regions: Array = []
-var _pickable: Array = []
-var _row := 0
 var _at_region := 0
-var _at_friend := 0
-var _labels := {}
 var _pins: Array = []
-var _friend_nodes: Array = []
 var _rng := RandomNumberGenerator.new()
 var _species := {}
 var _schema: TagSchema = null
@@ -59,34 +58,21 @@ func _ready() -> void:
 		if String(_regions[i].get("id", "")) == Game.region_id:
 			_at_region = i
 
-	# 동료가 될 수 있는 것만 고르게 한다 — 감각이 없는 종은 유도를 못 한다 (§3.3).
-	# 종 이름으로 거르지 않는다: `senses` 가 비었는지만 본다 (두꺼비가 그 경우다).
-	for one in Game.collection:
-		var config: Dictionary = _species.get(String(one["species_id"]), {})
-		if (config.get("senses", []) as Array).is_empty():
-			continue
-		_pickable.append(one)
-
 	_draw_map()
-	_build_panel()
 	_refresh()
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not event.is_pressed():
 		return
-	if event.is_action("ui_down") and event.is_action_pressed("ui_down"):
-		_row = mini(_row + 1, ROWS.size() - 1)
-	elif event.is_action("ui_up") and event.is_action_pressed("ui_up"):
-		_row = maxi(_row - 1, 0)
-	elif event.is_action_pressed("ui_left"):
+	if event.is_action_pressed("ui_left"):
 		_step(-1)
 	elif event.is_action_pressed("ui_right"):
 		_step(1)
-	elif event.is_action_pressed("ui_accept"):
-		_accept()
+	elif event.is_action_pressed("ui_accept") or event.is_action_pressed("interact"):
+		_leave()
 		return
-	elif event.is_action_pressed("ui_cancel"):
+	elif event.is_action_pressed("ui_cancel") or event.is_action_pressed("interact_cancel"):
 		get_tree().call_deferred("change_scene_to_file", HOME_SCENE)
 		return
 	else:
@@ -95,41 +81,19 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _step(by: int) -> void:
-	if _row == 0 and not _regions.is_empty():
-		_at_region = posmod(_at_region + by, _regions.size())
-	elif _row == 1 and not _pickable.is_empty():
-		_at_friend = posmod(_at_friend + by, _pickable.size())
-
-
-func _accept() -> void:
-	if _row == 1 and not _pickable.is_empty():
-		var uid := int(_pickable[_at_friend]["uid"])
-		if uid in Game.party:
-			Game.party.erase(uid)
-		elif Game.party.size() < Game.PARTY_MAX:
-			Game.party.append(uid)
-		else:
-			# 꽉 찼으면 가장 먼저 고른 아이가 나간다. 막고 끝내면 왜 안 되는지 안 보인다.
-			Game.party.pop_front()
-			Game.party.append(uid)
-		Game.save_game()
-		_refresh()
+	if _regions.is_empty():
 		return
-	if _row == 2:
-		_leave()
-		return
-	# 목적지 줄에서 누르면 다음 줄로 — 고르고 나면 다음이 무엇인지 보여야 한다
-	_row = 1
-	_refresh()
+	_at_region = posmod(_at_region + by, _regions.size())
 
 
+## 어디로만 정하고 넘긴다. 누구랑은 다음 화면이다.
 func _leave() -> void:
 	var region: Dictionary = _regions[_at_region]
 	if not bool(region.get("open", true)):
 		return
 	Game.region_id = String(region["id"])
 	Game.save_game()
-	get_tree().call_deferred("change_scene_to_file", FIELD_SCENE)
+	get_tree().call_deferred("change_scene_to_file", TEAM_SCENE)
 
 
 # --- 지도 --------------------------------------------------------------------
@@ -254,121 +218,105 @@ func _spot(region: Dictionary) -> Vector2:
 
 # --- 아래 판 ------------------------------------------------------------------
 
-func _build_panel() -> void:
-	for key in ["곳", "지형", "기분", "만난", "동료", "안내"]:
-		_labels[key] = _label(key)
-	_labels["곳"].position = Vector2(12, 210)
-	_labels["곳"].add_theme_font_size_override("font_size", 22)
-	_labels["지형"].position = Vector2(12, 240)
-	_labels["기분"].position = Vector2(12, 256)
-	_labels["만난"].position = Vector2(12, 272)
-	_labels["동료"].position = Vector2(12, 296)
-	_labels["안내"].position = Vector2(12, 338)
-	_labels["안내"].modulate = Color(1, 1, 1, 0.7)
-
-
 func _refresh() -> void:
+	for node in _panel.get_children() + _text.get_children():
+		node.get_parent().remove_child(node)
+		node.queue_free()
 	var region: Dictionary = _regions[_at_region]
 	var open := bool(region.get("open", true))
 	for i in _pins.size():
 		if _pins[i] != null:
-			_pins[i].modulate = Color(1, 1, 1, 1.0 if i == _at_region else 0.55)
+			_pins[i].modulate = Color(1, 1, 1, 1.0 if i == _at_region else 0.5)
 			_pins[i].scale = Vector2.ONE * (1.0 if i == _at_region else 0.8)
 
-	_labels["곳"].text = ("◀ %s ▶" if _row == 0 else "  %s") % String(region.get("name", "???"))
+	_label("◀ %s ▶" % String(region.get("name", "???")), 22, Vector2(16, 208))
 	if not open:
 		# 여는 조건을 확률이나 수치로 쓰지 않는다 — 조건이 아니라 **약속**이다 (§3.9)
-		_labels["지형"].text = String(region.get("promise", ""))
-		_labels["기분"].text = ""
-		_labels["만난"].text = ""
+		_label(String(region.get("promise", "")), 11, Vector2(18, 246))
 	else:
-		var mix: Dictionary = region.get("terrain", {}).get("patches", {})
-		var shape: Array = mix.keys()
-		shape.sort_custom(func(a, b): return int(mix[a]) > int(mix[b]))
-		_labels["지형"].text = "지형: " + " · ".join(shape)
-		_labels["기분"].text = _mood(region)
-		_labels["만난"].text = _known(region)
-	_show_friends()
-	_labels["안내"].text = _hint(open)
+		_show_terrain(region)
+		_show_mood(region)
+		_show_known(region)
+	Keycap.place(_panel, "고르기", Vector2(18, 328))
+	Keycap.place(_panel, "인사·정하기", Vector2(62, 328))
+	Keycap.place(_panel, "그만두기", Vector2(106, 328))
 
 
-## 동료의 habitat 과 목적지 지형이 겹치면 "좋아할 거예요".
-## ⚠️ **확률이 아니라 안내다.** 유불리를 말하지 않는다 — 여행이 동료에게도 놀이라는 §3.7 이
-##    여기서 보인다. 종 이름으로 분기하지 않고 habitat 태그만 본다.
-func _mood(region: Dictionary) -> String:
+## ★ **"지형: 물가 · 숲" 처럼 글로 쓰지 않는다** (§6.9). 타일 그림 + 아래 이름이다.
+func _show_terrain(region: Dictionary) -> void:
+	var mix: Dictionary = region.get("terrain", {}).get("patches", {})
+	var order: Array = mix.keys()
+	order.sort_custom(func(a, b): return int(mix[a]) > int(mix[b]))
+	var x := 18.0
+	for name in order:
+		var tile := SpriteLibrary.terrain_tile(String(name))
+		if tile == null:
+			continue
+		var node := Sprite2D.new()
+		node.texture = tile
+		node.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		node.centered = false
+		node.position = Vector2(x, 244)
+		node.scale = Vector2.ONE * 2
+		_panel.add_child(node)
+		var under := _label(String(name), 11, Vector2(x - 4, 278))
+		under.modulate = Color(1, 1, 1, 0.8)
+		x += 44.0
+
+
+## 동료가 좋아할지 — **얼굴 + 기쁨 눈**. 유불리를 말하지 않는다.
+## 여행이 동료에게도 놀이라는 §3.7 이 여기서 보인다.
+func _show_mood(region: Dictionary) -> void:
 	var shape: Array = (region.get("terrain", {}).get("patches", {}) as Dictionary).keys()
 	shape.append(String(region.get("terrain", {}).get("base", "")))
-	var glad: Array = []
+	var x := 236.0
+	var glad_any := false
 	for one in Game.party_members():
 		var config: Dictionary = _species.get(String(one["species_id"]), {})
+		var glad := false
 		for place in config.get("habitat", []):
-			if String(place) in shape and not (String(config.get("name", "")) in glad):
-				glad.append(String(config.get("name", "")))
-	if glad.is_empty():
-		return ""
-	# 조사는 받침을 따라간다 — "개 가" 처럼 띄면 아이가 읽다가 걸린다
-	return "%s 좋아할 거예요" % Josa.이가(" · ".join(glad))
+			if String(place) in shape:
+				glad = true
+		if not glad:
+			continue
+		glad_any = true
+		Faces.place(_panel, Faces.glad(config), Vector2(x, 240), 2)
+		x += 46.0
+	if glad_any:
+		var say := _label("좋아할 거예요", 11, Vector2(236, 284))
+		say.modulate = Color(1, 1, 1, 0.8)
 
 
-## 만난 적 있는 아이 — 도감 연동. **여기 없는 종도 나온다는 것을 함께 적는다** (§3.9).
-func _known(region: Dictionary) -> String:
-	var met: Array = []
-	var unmet := 0
+## 만난 적 있는 아이 — **얼굴 줄**. 이름을 나열하지 않는다.
+## 못 만난 게 있으면 **실루엣 하나** — 몇 종인지 세지 않는다. 그건 스포일러다 (§3.2).
+func _show_known(region: Dictionary) -> void:
+	var x := 396.0
+	var unmet := false
 	for id in region.get("ecology", {}):
-		if id in Game.seen:
-			var config: Dictionary = _species.get(id, {})
-			met.append(String(config.get("name", id)))
-		else:
-			unmet += 1
-	if met.is_empty():
-		return "아직 아무도 못 만나 봤어요" if unmet > 0 else ""
-	var line := "만난 적 있는 아이: " + " · ".join(met)
-	if unmet > 0:
-		line += "  (처음 보는 아이도 있어요)"
-	return line
+		if not (id in Game.seen):
+			unmet = true
+			continue
+		Faces.place(_panel, Faces.of(_species.get(id, {})), Vector2(x, 244), 1)
+		x += 22.0
+	if unmet:
+		Faces.place(_panel, Faces.unknown(Faces.of(_species.get("squirrel", {}))),
+			Vector2(x + 6, 244), 1)
+	if x > 396.0 or unmet:
+		var say := _label("여기서 만난 아이", 11, Vector2(396, 278))
+		say.modulate = Color(1, 1, 1, 0.8)
 
 
-func _show_friends() -> void:
-	for node in _friend_nodes:
-		node.queue_free()
-	_friend_nodes.clear()
-	var x := 12.0
-	for i in _pickable.size():
-		var one: Dictionary = _pickable[i]
-		var config: Dictionary = _species.get(String(one["species_id"]), {})
-		var going := int(one["uid"]) in Game.party
-		var chip := _label("chip%d" % i)
-		chip.text = "%s%s%s" % [
-			"[" if going else " ",
-			String(config.get("name", one["species_id"])),
-			"]" if going else " "]
-		chip.position = Vector2(x, 316)
-		chip.modulate = Color(1, 1, 1, 1.0 if going else 0.5)
-		if _row == 1 and i == _at_friend:
-			chip.modulate = Color(1.0, 0.92, 0.55)
-		_friend_nodes.append(chip)
-		x += 62.0
-	_labels["동료"].text = "같이 갈 아이  (%d / %d)" % [Game.party.size(), Game.PARTY_MAX]
-
-
-func _hint(open: bool) -> String:
-	match _row:
-		0:
-			return "◀ ▶ 로 고르고 [스페이스] 로 정해요   ·   [Esc] 집으로"
-		1:
-			return "◀ ▶ 로 옮기고 [스페이스] 로 데려가요   ·   ▼ 다음"
-		_:
-			return "[스페이스] 로 나가요" if open else "여기는 아직 갈 수 없어요"
-
-
-func _label(_key: String) -> Label:
+func _label(text: String, size: int, at: Vector2) -> Label:
 	var label := Label.new()
 	if ResourceLoader.exists(HANGUL_FONT):
 		label.add_theme_font_override("font", load(HANGUL_FONT))
-	label.add_theme_font_size_override("font_size", 11)
-	label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
+	label.add_theme_font_size_override("font_size", size)
+	label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
 	label.add_theme_constant_override("shadow_offset_x", 1)
 	label.add_theme_constant_override("shadow_offset_y", 1)
+	label.text = text
+	label.position = at
+	label.size.x = 600
 	_text.add_child(label)
 	return label
 

@@ -7,7 +7,7 @@
 extends SceneTree
 
 ## 이 아래로 떨어지면 어딘가에서 판정이 조용히 끊긴 것이다.
-const FLOOR := 310
+const FLOOR := 325
 
 var _pass := 0
 var _fail := 0
@@ -1450,6 +1450,44 @@ func _test_weather(field, game) -> void:
 	game.last_device = was
 	_check("패드를 들면 그림이 바뀐다", by_key != by_pad)
 
+	# ★ **나가는 길이 있다** (BRIEF §3.13). 이게 없어서 원정을 나가면 못 돌아왔다.
+	var door: CanvasLayer = field.get_node("GoHome")
+	_check("나가는 문이 있다", door != null)
+	if door != null:
+		_check("평소에는 닫혀 있다", not door.is_open())
+		door.open([field.companions[0].species])
+		_check("열린다", door.is_open())
+		var said: Array = []
+		for node in door.get_node("Text").get_children():
+			said.append(String(node.text))
+		var line := " ".join(said)
+		_check("무엇을 묻는지 한 줄로 말한다", "집에 갈까요?" in line, line)
+		_check("고를 것은 둘뿐이다", ("갈래요" in line) and ("더 놀래요" in line), line)
+		# ⚠️ **숫자로 적지 않는다** — "동료 2 / 초대 1" 은 성적표가 된다 (§6.9)
+		for banned in ["동료", "초대 ", "마리"]:
+			_check("나가는 문에 '%s' 를 안 적는다" % banned, not (banned in line), line)
+		_check("같이 가는 아이는 얼굴로 보여준다", door.get_node("Art").get_child_count() >= 3,
+			"%d 개" % door.get_node("Art").get_child_count())
+		door.close()
+		_check("닫힌다", not door.is_open())
+
+	# ★ 얼굴 — **이름 대신 쓰는 그림.** 캔버스가 아니라 **잉크**를 기준으로 오린다.
+	var face_of := Faces.of(field.player.species)
+	_check("얼굴을 오려낸다", Faces.of(_species_named(field, "dog")) != null)
+	var cut = Faces.of(_species_named(field, "dog"))
+	if cut is AtlasTexture:
+		var region: Rect2 = (cut as AtlasTexture).region
+		var whole := (cut as AtlasTexture).atlas.get_image()
+		var ink := Faces._ink(whole)
+		_check("빈 줄을 오리지 않는다 — head_anchor 는 머리가 아니라 아이콘 자리다",
+			region.position.y >= ink.position.y - 1.5,
+			"오린 자리 y=%.0f · 그림 시작 y=%.0f" % [region.position.y, ink.position.y])
+		_check("얼굴은 머리 쪽이다 — 측면 그림은 오른쪽을 본다",
+			region.end.x >= ink.end.x - 1.0,
+			"오린 오른쪽 %.0f · 그림 오른쪽 %.0f" % [region.end.x, ink.end.x])
+		_check("얼굴은 작다 — 크게 오리면 작은 전신 그림이 된다",
+			region.size.x <= 16 and region.size.y <= 16, "%s" % region.size)
+
 	# ★ 실제 날씨는 튀지 않는다 — 지금과 가까운 상태로만 옮겨간다 (사용자 지적)
 	var walker := WeatherSystem.new()
 	walker.setup(schema, RandomNumberGenerator.new(), {"초원": 2000, "숲": 600})
@@ -1833,6 +1871,13 @@ func _promoted(field, id: String) -> Actor:
 		animal.position = field.player.position + Vector2(24, 0)
 		field.sim.update(0.016, field.player.position)
 	return animal.actor
+
+
+func _species_named(field, id: String) -> Dictionary:
+	for companion in field.companions:
+		if companion.species_id == id:
+			return companion.species
+	return DataLoader.load_all(true).species.get(id, {})
 
 
 func _find_animal(field, id: String) -> FieldSim.WildAnimal:

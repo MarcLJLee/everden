@@ -22,6 +22,7 @@ const WEATHER_MARGIN := 1.6
 @onready var _snow: SnowField = $Snow
 @onready var _ambient: AmbientLife = $AmbientAir
 @onready var _card: CanvasLayer = $InviteCard
+@onready var _go_home: CanvasLayer = $GoHome
 @onready var _camera: Camera2D = $Camera2D
 @onready var _overlay = $DebugOverlay
 @onready var _modulate: CanvasModulate = $CanvasModulate
@@ -117,6 +118,8 @@ func _ready() -> void:
 	weather.setup(schema, _rng, _terrain_mix())
 	# 잡을 수 없는 생명. 지면·수면 생물은 Y-sort 안으로 들어가 캐릭터에 가린다.
 	_ambient.setup(terrain, _rng, _actors, region)
+	_go_home.go_home.connect(func() -> void:
+		get_tree().call_deferred("change_scene_to_file", "res://scenes/home/Home.tscn"))
 	_weather_layers.build()
 	# `godot --path . -- --snow` 로 켜면 눈부터 시작한다. 계절이 없는 동안 눈을 보려는 용도다.
 	if "--snow" in OS.get_cmdline_user_args():
@@ -134,9 +137,13 @@ func _process(delta: float) -> void:
 		return
 
 	_handle_debug_input()
-	# 카드가 떠 있는 동안에는 걸어 다니지 않는다 — 지금은 그 아이를 보는 시간이다
-	player.move_vector = Vector2.ZERO if _card.is_open() \
+	# 무언가 물어보는 동안에는 걸어 다니지 않는다
+	var asking: bool = _card.is_open() or _go_home.is_open()
+	player.move_vector = Vector2.ZERO if asking \
 		else Input.get_vector("move_left", "move_right", "move_up", "move_down")
+	# ★ **나가는 길.** 이게 없어서 원정을 나가면 못 돌아왔다 (BRIEF §3.13).
+	if not asking and Input.is_action_just_pressed("open_menu"):
+		_go_home.open(_going_home_faces())
 	_follow_player(delta)
 
 	sim.update(delta, player.position)
@@ -241,6 +248,18 @@ func _collect_targets(species_by_id: Dictionary) -> Array:
 func _terrain_confine(actor: Actor) -> Callable:
 	return func(from: Vector2, at: Vector2) -> Vector2:
 		return terrain.slide(from, at.clamp(_bounds.position, _bounds.end), schema, actor.habitat)
+
+
+## 같이 가는 아이들 — 데려온 동료와 오늘 초대한 아이.
+## ⚠️ **숫자로 적지 않는다.** "동료 2 / 초대 1" 이라고 쓰면 그게 성적표가 된다 (§6.9).
+func _going_home_faces() -> Array:
+	var faces: Array = []
+	for companion in companions:
+		faces.append(companion.species)
+	for animal in sim.animals:
+		if animal.invited:
+			faces.append(animal.species)
+	return faces
 
 
 func _make_actor(config: Dictionary, sex := "") -> Actor:
@@ -402,7 +421,7 @@ func _promotion_radius_px() -> float:
 # --- 교감 ------------------------------------------------------------------
 
 func _update_interaction(delta: float) -> void:
-	if _card.is_open():
+	if _card.is_open() or _go_home.is_open():
 		return
 	if gauge.active:
 		player.look_direction = gauge.target.position - player.position

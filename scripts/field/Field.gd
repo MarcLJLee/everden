@@ -48,7 +48,6 @@ var _clues: Array = []
 var _puffs: Array = []
 var _promotion_px := 0.0
 var _props: Array = []
-var _prop_clock := 0.0
 var _last_weather_name := ""
 ## 지금 원정 중인 지역. 세계 지도가 생기면 거기서 정해진다 (BRIEF §3.9).
 @export var region_id := "home_hills"
@@ -157,8 +156,7 @@ func _process(delta: float) -> void:
 		float(weather.axes.get("wind", 0.3)), camera_visible_rect())
 	_ambient.update(delta, camera_visible_rect())
 	# 풀과 나무는 바람에 흔들린다. 바람 축 하나가 세기와 빈도를 둘 다 정한다.
-	_prop_clock += delta
-	PropScatter.sway(_props, _prop_clock, float(weather.axes.get("wind", 0.3)),
+	PropScatter.sway(_props, delta, float(weather.axes.get("wind", 0.3)),
 		camera_visible_rect())
 	_advance_palette(delta)
 	_apply_eyeshine()

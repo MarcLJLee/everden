@@ -131,10 +131,23 @@ static func swayed_texture(source: Texture2D, lean: int) -> ImageTexture:
 	var height := image.get_height()
 	var out := Image.create_empty(width, height, false, Image.FORMAT_RGBA8)
 	out.fill(Color(0, 0, 0, 0))
-	var tallest := maxf(float(height - 1), 1.0)
+	# ⚠️ 기준은 캔버스 위가 아니라 **그림의 우듬지**다. 프롭은 캔버스 아래쪽에 붙어 있어서
+	#    캔버스 위를 꼭대기로 잡으면 **가장 많이 밀리는 줄이 빈 줄**이 된다 —
+	#    풀 뭉치(16 캔버스에 아래 10줄만 그려짐)가 그래서 안 흔들려 보였다 (사용자 지적).
+	var crown := 0
 	for y in height:
-		# 0(밑동) ~ 1(꼭대기). 제곱을 씌워야 아래쪽이 뻣뻣하고 위만 낭창거린다.
-		var up: float = pow(float(height - 1 - y) / tallest, 1.7)
+		var found := false
+		for x in width:
+			if image.get_pixel(x, y).a > 0.0:
+				found = true
+				break
+		if found:
+			crown = y
+			break
+	var tallest := maxf(float(height - 1 - crown), 1.0)
+	for y in height:
+		# 0(밑동) ~ 1(우듬지). 제곱을 씌워야 아래쪽이 뻣뻣하고 위만 낭창거린다.
+		var up: float = pow(clampf(float(height - 1 - y) / tallest, 0.0, 1.0), 1.7)
 		var shift := int(round(float(lean) * up))
 		for x in width:
 			var from := x - shift

@@ -1150,12 +1150,29 @@ func _test_weather(field) -> void:
 				moved_root = true
 		_check("밑동은 안 움직인다 — 뿌리가 흔들리면 그건 바람이 아니다", not moved_root)
 		# 위로 갈수록 많이 밀린다
-		var top_shift := 0
+		# ⚠️ 캔버스 위가 아니라 **그림의 우듬지**가 밀려야 한다. 프롭은 캔버스 아래쪽에
+		#    붙어 있어서, 캔버스 기준으로 밀면 가장 많이 밀리는 줄이 빈 줄이 된다.
+		var crown := 0
+		for y in height:
+			var found := false
+			for x in upright.get_width():
+				if upright.get_pixel(x, y).a > 0.0:
+					found = true
+			if found:
+				crown = y
+				break
+		# 우듬지 줄은 **정확히 lean 만큼** 밀려야 한다. 덜 밀렸다면 기준이 캔버스 위에
+		# 잡혀 있다는 뜻이다 — 그 경우 풀 뭉치는 거의 안 흔들린다.
+		var before_left := 99
+		var after_left := 99
 		for x in upright.get_width():
-			for y in 3:
-				if upright.get_pixel(x, y) != tilted.get_pixel(x, y):
-					top_shift += 1
-		_check("꼭대기는 밀린다", top_shift > 0, "%d 픽셀이 달라졌다" % top_shift)
+			if before_left == 99 and upright.get_pixel(x, crown).a > 0.0:
+				before_left = x
+			if after_left == 99 and tilted.get_pixel(x, crown).a > 0.0:
+				after_left = x
+		_check("우듬지는 기울인 만큼 온전히 밀린다 — 기준은 캔버스가 아니라 그림이다",
+			after_left - before_left == 2,
+			"%d → %d (우듬지 %d행)" % [before_left, after_left, crown])
 		# 색을 새로 만들지 않는다 — 미는 것이지 그리는 게 아니다
 		var palette := {}
 		for y in height:
@@ -1178,20 +1195,67 @@ func _test_weather(field) -> void:
 	_check("흔들림 표가 읽힌다", int(swayers[0]["lean"]) > 0)
 	var wide := Rect2(Vector2.ZERO, Vector2(400, 400))
 	var reach := {}
-	for wind in [0.0, 0.5, 1.0]:
+	for wind in [0.0, 0.25, 0.66]:
 		var seen := []
 		for step in 400:
-			PropScatter.sway(swayers, float(step) * 0.05, wind, wide)
+			PropScatter.sway(swayers, 0.05, wind, wide)
 			if not (int(swayers[3]["at"]) in seen):
 				seen.append(int(swayers[3]["at"]))
 		reach[wind] = seen
 	_check("무풍이면 안 흔들린다", reach[0.0] == [0], "%s" % [reach[0.0]])
-	var breezy: Array = reach[0.5]
+	# 눈금은 실제로 부는 바람에 맞춘다 — 0.25 는 맑은 날, 0.66 은 폭우다
+	var breezy: Array = reach[0.25]
 	_check("산들바람에는 좌우로 흔들린다",
 		breezy.min() < 0 and breezy.max() > 0, "%s" % [breezy])
-	var gale: Array = reach[1.0]
+	var gale: Array = reach[0.66]
 	_check("센 바람에는 한쪽으로 기운 채 떤다", gale.min() > 0, "%s" % [gale])
 	_check("기우는 쪽은 구름·비가 흐르는 쪽과 같다 (+x)", gale.max() > 0)
+
+	# ★ **한 박자로 흔들리면 바람이 아니라 화면이 떠는 것으로 보인다** (사용자 지적).
+	#   실제로 뿌려진 프롭들이 서로 어긋나 노는지 잰다.
+	var breeze := Rect2(Vector2.ZERO, field._bounds.size)
+	for step in 600:
+		PropScatter.sway(field._props, 1.0 / 60.0, 0.38, breeze)
+	var waves := []
+	var beats := {}
+	for entry in field._props:
+		if int(entry["lean"]) == 0:
+			continue
+		waves.append(float(entry["wave"]))
+		beats[snappedf(float(entry["hz"]), 0.01)] = true
+	_check("흔들리는 프롭이 여럿 있다", waves.size() > 20, "%d 포기" % waves.size())
+	if waves.size() > 20:
+		var lowest: float = waves.min()
+		var highest: float = waves.max()
+		_check("같은 순간에 서로 다르게 기울어 있다 — 한 박자로 놀지 않는다",
+			highest - lowest > 1.2, "%.2f ~ %.2f" % [lowest, highest])
+		_check("포기마다 빈도가 다르다 — 시간이 갈수록 벌어진다",
+			beats.size() > waves.size() / 3, "%d / %d 종" % [beats.size(), waves.size()])
+
+	# ⚠️ 날씨가 바뀌는 순간 휘청이면 안 된다 — 날씨 겹에서 똑같은 실수를 했다
+	# 먼저 **바람이 안 변할 때** 한 프레임에 얼마나 움직이는지 잰다. 이게 정상치다.
+	var steady := 0.0
+	for step in 1200:
+		for entry in field._props:
+			entry["_before"] = float(entry["wave"])
+		PropScatter.sway(field._props, 1.0 / 60.0, 0.66, breeze)
+		for entry in field._props:
+			if int(entry["lean"]) == 0:
+				continue
+			steady = maxf(steady, absf(float(entry["wave"]) - float(entry["_before"])))
+	var lurch := 0.0
+	for step in 3600:
+		for entry in field._props:
+			entry["_before"] = float(entry["wave"])
+		# 바람이 0.2 에서 0.66 으로 옮겨가는 동안
+		PropScatter.sway(field._props, 1.0 / 60.0,
+			0.2 + 0.46 * (float(step) / 3600.0), breeze)
+		for entry in field._props:
+			if int(entry["lean"]) == 0:
+				continue
+			lurch = maxf(lurch, absf(float(entry["wave"]) - float(entry["_before"])))
+	_check("바람이 변해도 휘청이지 않는다", lurch < steady * 1.3 + 0.02,
+		"변할 때 %.3f · 안 변할 때 %.3f (60초 경과 뒤)" % [lurch, steady])
 
 	# 안 흔들리는 것은 안 흔든다 — 바위가 흔들리면 그게 더 이상하다
 	for still in ["rock", "log", "bigrock", "pebbles"]:
@@ -1201,7 +1265,7 @@ func _test_weather(field) -> void:
 	# 화면 밖은 갈아끼우지 않는다
 	var far := [{"name": "tuft", "sprite": Sprite2D.new(), "position": Vector2(9000, 9000),
 		"lean": 1, "hz": 1.0, "phase": 0.0, "at": 0}]
-	PropScatter.sway(far, 3.7, 1.0, wide)
+	PropScatter.sway(far, 0.05, 1.0, wide)
 	_check("화면 밖 프롭은 건드리지 않는다", int(far[0]["at"]) == 0)
 
 	# ★ 실제 날씨는 튀지 않는다 — 지금과 가까운 상태로만 옮겨간다 (사용자 지적)

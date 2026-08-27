@@ -218,7 +218,7 @@ func update(delta: float, player_position: Vector2) -> void:
 func _wander(animal: WildAnimal, delta: float, player_position: Vector2) -> void:
 	animal.turn_timer -= delta
 	if animal.turn_timer <= 0.0:
-		animal.velocity = _random_velocity() * animal.move_scale
+		animal.velocity = _bankward(animal) * animal.move_scale
 		animal.turn_timer = _rng.randf_range(1.5, 4.5)
 
 	# 수줍은 개체는 가까이 가면 물러선다. 개성이 화면에서 보이는 자리다 (BRIEF §2.5).
@@ -343,6 +343,36 @@ func _random_velocity() -> Vector2:
 	var speed := _tuning.wild_speed * _tuning.tile_size
 	return sideways(Vector2.RIGHT.rotated(_rng.randf_range(0.0, TAU))) \
 		* speed * _rng.randf_range(0.4, 1.0)
+
+
+## ★ **물 한가운데 있는 동물은 물가로 나온다.** (원칙 2)
+##
+##   막힌 지형(물·바위)에 사는 동물이 그 한가운데를 계속 배회하면 **영영 다가갈 수 없다** —
+##   재보니 수달 하나가 60초 내내 그랬다. 그건 되돌릴 수 없는 벽이다.
+##   물줄기를 좁히면 도랑이 되므로 **AI 로 푼다**: 밟을 수 있는 땅이 초대 반경 안에
+##   없으면 배회 목표를 뭍 쪽으로 돌린다. 도트 0장이고, 수달은 원래 물가로 나온다.
+##
+##   ⚠️ 물 밖으로 **내보내는 게 아니다.** 서식지는 그대로 지킨다(slide 가 막는다) —
+##      물가 쪽으로 향하게만 한다.
+func _bankward(animal: WildAnimal) -> Vector2:
+	var wander := _random_velocity()
+	if _terrain == null or _schema == null:
+		return wander
+	var reach := _tuning.interact_radius * _tuning.tile_size
+	var toward := Vector2.ZERO
+	var far := true
+	# 둘레를 훑어 밟을 수 있는 땅을 찾는다. 가까우면 그냥 놀게 둔다.
+	for step in 12:
+		var way := Vector2.RIGHT.rotated(TAU * float(step) / 12.0)
+		if _terrain.can_stand(animal.position + way * reach, _schema, []):
+			far = false
+			break
+		if toward == Vector2.ZERO and _terrain.can_stand(
+				animal.position + way * reach * 3.0, _schema, []):
+			toward = way
+	if far and toward != Vector2.ZERO:
+		return sideways(toward) * _tuning.wild_speed * _tuning.tile_size
+	return wander
 
 
 ## 방향에 수평 성분을 남긴다. 세로로만 가는 목표를 비스듬히 눕힌다.

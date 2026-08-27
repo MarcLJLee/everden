@@ -7,7 +7,7 @@
 extends SceneTree
 
 ## 이 아래로 떨어지면 어딘가에서 판정이 조용히 끊긴 것이다.
-const FLOOR := 325
+const FLOOR := 332
 
 var _pass := 0
 var _fail := 0
@@ -1491,6 +1491,68 @@ func _test_weather(field, game) -> void:
 			"오린 오른쪽 %.0f · 그림 오른쪽 %.0f" % [region.end.x, ink.end.x])
 		_check("얼굴은 작다 — 크게 오리면 작은 전신 그림이 된다",
 			region.size.x <= 16 and region.size.y <= 16, "%s" % region.size)
+
+	# ★ **냇가에는 물이 있어야 한다** (사용자 지적). 웅덩이 아홉 개로 찍었더니
+	#   물이 3% 뿐이고 흩어져서 "냇가에 물이 없다" 가 됐다. 냇가는 덩어리가 아니라 **줄기**다.
+	var all_regions := DataLoader.load_all(true).regions
+	var wetness := {}
+	for id in ["home_hills", "home_creek"]:
+		var shape: Dictionary = (all_regions[id] as Dictionary).get("terrain", {})
+		var probe := TerrainMap.new()
+		for name in field.schema.terrain_walkable:
+			if not field.schema.walkable(String(name)):
+				probe.blocked_terrains.append(String(name))
+		var wet_rng := RandomNumberGenerator.new()
+		wet_rng.seed = 4242
+		probe.generate(Vector2i(64, 48), 16, shape.get("patches", {}), wet_rng,
+			String(shape.get("base", "초원")), shape.get("streams", {}))
+		var wet_tiles := 0
+		for y in 48:
+			for x in 64:
+				if probe.at_tile(Vector2i(x, y)) == "물가":
+					wet_tiles += 1
+		wetness[id] = float(wet_tiles) / (64.0 * 48.0)
+		# 줄기는 **이어져 있다** — 한 줄에 여러 칸이 나란히 붙는다
+		var widest_run := 0
+		for y in 48:
+			var run := 0
+			for x in 64:
+				run = run + 1 if probe.at_tile(Vector2i(x, y)) == "물가" else 0
+				widest_run = maxi(widest_run, run)
+		_check("%s 의 물은 이어져 흐른다 — 흩어진 웅덩이가 아니다" % id, widest_run >= 2,
+			"가장 긴 줄 %d칸" % widest_run)
+	_check("냇가에 물이 있다", wetness["home_creek"] > 0.06,
+		"%.1f%%" % (wetness["home_creek"] * 100.0))
+	_check("냇가가 뒷산보다 물이 많다 — 그게 지역을 고르는 이유다",
+		wetness["home_creek"] > wetness["home_hills"] * 2.0,
+		"냇가 %.1f%% · 뒷산 %.1f%%"
+			% [wetness["home_creek"] * 100.0, wetness["home_hills"] * 100.0])
+	_check("뒷산에도 개울은 있다", wetness["home_hills"] > 0.01,
+		"%.1f%%" % (wetness["home_hills"] * 100.0))
+
+	# ⚠️ **물 한가운데 갇히면 영영 다가갈 수 없다** — 되돌릴 수 없는 벽이다 (원칙 2).
+	#    물줄기를 좁히면 도랑이 되므로 AI 로 푼다: 뭍이 멀면 물가 쪽으로 향한다.
+	var swimmers: Array = []
+	for animal in field.sim.animals:
+		if "물가" in animal.species.get("habitat", []):
+			swimmers.append(animal)
+	if not swimmers.is_empty():
+		var bank_reach: float = field.tuning.interact_radius * field.tuning.tile_size
+		var touched := {}
+		for step in 900:
+			field.sim.update(1.0 / 60.0, field.player.position)
+			for animal in swimmers:
+				if touched.has(animal):
+					continue
+				for angle in 12:
+					var probe_at: Vector2 = animal.position \
+						+ Vector2.RIGHT.rotated(TAU * float(angle) / 12.0) * bank_reach
+					if field.terrain.can_stand(probe_at, field.schema, []):
+						touched[animal] = true
+						break
+		_check("물에 사는 개체도 언젠가는 다가갈 수 있다 — 갇히지 않는다",
+			touched.size() == swimmers.size(),
+			"%d / %d 마리" % [touched.size(), swimmers.size()])
 
 	# ★ 실제 날씨는 튀지 않는다 — 지금과 가까운 상태로만 옮겨간다 (사용자 지적)
 	var walker := WeatherSystem.new()

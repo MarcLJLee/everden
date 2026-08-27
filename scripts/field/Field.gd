@@ -87,7 +87,8 @@ func _ready() -> void:
 	var patches: Dictionary = shape.get("patches", {
 		"숲": tuning.forest_patches, "물가": tuning.water_patches, "바위": tuning.rock_patches,
 	})
-	terrain.generate(tuning.map_size, tile, patches, _rng, String(shape.get("base", "초원")))
+	terrain.generate(tuning.map_size, tile, patches, _rng, String(shape.get("base", "초원")),
+		shape.get("streams", {}))
 	_ground.setup(tuning, terrain)
 	_props = PropScatter.scatter(_actors, terrain, tuning, _rng)
 	_camera.zoom = Vector2.ONE * tuning.camera_zoom

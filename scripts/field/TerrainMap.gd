@@ -18,7 +18,7 @@ var _tiles := PackedStringArray()
 var blocked_terrains: Array = []
 
 func generate(map_size: Vector2i, tile_px: int, patches: Dictionary, rng: RandomNumberGenerator,
-		base := BASE) -> void:
+		base := BASE, streams := {}) -> void:
 	size = map_size
 	tile_size = tile_px
 	_tiles.resize(size.x * size.y)
@@ -29,6 +29,43 @@ func generate(map_size: Vector2i, tile_px: int, patches: Dictionary, rng: Random
 		var thin: bool = String(terrain) in blocked_terrains
 		for i in int(patches[terrain]):
 			_blob(String(terrain), rng, thin)
+	for terrain in streams:
+		var shape: Dictionary = streams[terrain]
+		for i in int(shape.get("count", 1)):
+			_stream(String(terrain), rng, int(shape.get("width", 2)))
+
+
+## 물줄기 하나. 한쪽 끝에서 반대쪽 끝까지 **이어져서** 지나간다.
+##
+## ★ **냇가는 덩어리가 아니라 줄기다.** 웅덩이 아홉 개로 찍었더니 물이 3% 뿐이었고
+##   그마저 흩어져서 "냇가에 물이 없다" 가 됐다 (사용자 지적).
+##   줄기는 이어져 있어서 **찾아가면 반드시 만난다** — 그게 지역을 고르는 이유가 된다.
+## ★ 얇게 찍는 이유(막힌 지형 한가운데 선 동물에게 다가갈 수 없다)는 줄기에서 저절로
+##   해결된다 — 두세 타일 폭이라 **어느 물 타일에서도 뭍이 한 발짝**이다.
+func _stream(terrain: String, rng: RandomNumberGenerator, width: int) -> void:
+	# 가로로 흐를지 세로로 흐를지부터 정한다. 늘 같은 방향이면 지도가 한 장으로 보인다.
+	var sideways := rng.randf() < 0.5
+	var along: int = size.x if sideways else size.y
+	var across: int = size.y if sideways else size.x
+	var at := float(rng.randi_range(int(across * 0.25), int(across * 0.75)))
+	var drift := rng.randf_range(-0.35, 0.35)
+	var wide := float(width)
+	for step in along:
+		# 이리저리 굽는다. 곧게 흐르면 물이 아니라 도랑으로 보인다.
+		drift = clampf(drift + rng.randf_range(-0.12, 0.12), -0.5, 0.5)
+		at = clampf(at + drift, 1.0, float(across - 2))
+		# ★ 폭도 흔들린다 — 좁아졌다 넓어지는 게 실제 냇가고,
+		#   **넓기만 하면 한가운데 선 동물에게 다가갈 수 없다.**
+		#   폭 4로 곧게 뻗었더니 물 타일의 절반이 뭍에서 2타일 넘게 떨어졌다.
+		wide = clampf(wide + rng.randf_range(-0.35, 0.35), 2.0, float(width))
+		var here := int(round(at))
+		var span := int(round(wide))
+		var half := int(span / 2.0)
+		for side in range(-half, span - half):
+			var tile := Vector2i(step, here + side) if sideways \
+				else Vector2i(here + side, step)
+			if _inside(tile):
+				_tiles[tile.y * size.x + tile.x] = terrain
 
 
 ## 원 하나를 찍는다. 가장자리를 조금 흐트러뜨려 네모로 안 보이게만 한다.

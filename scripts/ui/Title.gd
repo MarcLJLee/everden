@@ -33,6 +33,7 @@ const HANGUL_FONT := "res://fonts/Galmuri11.ttf"
 @onready var _menu: Control = $Menu
 @onready var _label: Label = $CompanionName
 @onready var _cursor: Sprite2D = $Cursor
+@onready var _weather_layers: WeatherLayers = $World/Weather
 
 enum State { MENU, CONFIRM, SETTING }
 
@@ -40,6 +41,11 @@ var data := {}
 var schema: TagSchema = null
 var tuning: FieldTuning = null
 var terrain := TerrainMap.new()
+## 배경이 단서인 화면이라 날씨도 그 지형의 날씨를 쓴다 —
+## 비 오는 날 두꺼비가 앉아 있으면 그것만으로 하나를 배운다 (BRIEF §6.7)
+var weather := WeatherSystem.new()
+## 지금 배경이 낮에 가까운가(1) 밤에 가까운가(0). 햇살·빛줄기가 여기 묶인다.
+var daylight := 1.0
 var companion: Actor = null
 var companion_name := ""
 ## 지형을 먼저 고른다. 종은 거기 사는 것 중에서 고른다.
@@ -80,6 +86,11 @@ func _ready() -> void:
 	_setup_label()
 	# Control 의 draw 시그널로 그린다 — 메뉴 하나 때문에 스크립트를 더 만들지 않는다
 	_cursor.texture = _texture(String(data.get("menu", {}).get("cursor", "ui/cursor_paw.png")))
+	weather.setup(schema, _rng, {chosen_terrain if not chosen_terrain.is_empty() else "초원": 1000})
+	# 켤 때마다 날씨도 한 점을 골라 둔다. 타이틀에서는 흐르지 않고 그 자리에 머문다.
+	weather._pick_target()
+	weather.axes = weather.target.duplicate()
+	_weather_layers.build()
 	_scrim_setup()
 	_load_settings()
 	_menu.draw.connect(_menu_draw)
@@ -166,6 +177,8 @@ func _apply_daypart(activity: String, background: Dictionary) -> void:
 	var cycle: Array = DayPalette.cycle()
 	if cycle.size() < 2:
 		return
+	# 0.3 이 낮, 0.86 이 밤이다 (title.json 의 daypart). 그 사이를 햇빛의 양으로 읽는다.
+	daylight = clampf(1.0 - (t - 0.3) / 0.5, 0.0, 1.0)
 	var position := t * (cycle.size() - 1)
 	var index := clampi(int(floor(position)), 0, cycle.size() - 2)
 	DayPalette.set_blend(String(cycle[index]), String(cycle[index + 1]), position - index)
@@ -289,6 +302,7 @@ func _input_dir() -> int:
 
 func _process(delta: float) -> void:
 	_idle += delta
+	_weather_layers.update(delta, weather.axes, Rect2(Vector2.ZERO, Vector2(640, 360)), daylight)
 	_update_name_label()
 
 	if _state == State.CONFIRM:

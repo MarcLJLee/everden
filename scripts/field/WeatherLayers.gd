@@ -21,6 +21,13 @@ const ROOT := "res://sprites/extracted/weather/"
 ##   곱연산으로 통째로 깔면 맑은 날에도 화면이 까매진다 (실제로 그렇게 만들었다가 못 볼 화면이 나왔다).
 ##   세기는 **알파**로 준다. weather.json 의 "multiply/alpha" 에서 alpha 쪽이다.
 const LAYERS := [
+	# ★ 빛줄기 — 구름 사이로 쏟아지는 선형 빛. 빛이 닿는 자리가 화사하게 빛난다.
+	#   구름이 **아주 없으면 안 생긴다** — 새어 나올 틈이 있어야 줄기가 된다.
+	#   그래서 세기가 구름 중간에서 가장 크다(peak).
+	{"name": "rays", "file": "light_shaft.png", "axis": "cloud", "base": 0.0, "gain": 0.30,
+		"drift": Vector2(5.0, 1.5), "wind": 18.0, "from": 0.0, "cover": 0.0,
+		"peak": 0.26, "blend": "add", "color": Color(1.0, 0.96, 0.82),
+		"phase": Vector2(37.0, 61.0), "daylight": true},
 	# ★ 햇살 얼룩 — **구름 그림자와 같은 타일**을 위상만 어긋나게 해서 밝게 더한다.
 	#   구름 사이로 새는 빛이 땅에 지나가는 그림이라 그림자와 짝이고,
 	#   맑을수록 세진다(invert). 새로 그리는 도트가 0 장이고 디더 규칙도 그대로다.
@@ -50,6 +57,11 @@ static func alpha_for(spec: Dictionary, axes: Dictionary) -> float:
 	# 맑을수록 세지는 겹이 있다 — 햇살은 구름의 반대다
 	if bool(spec.get("invert", false)):
 		raw = 1.0 - raw
+	# 가운데에서 가장 센 겹이 있다 — 빛줄기는 구름이 아주 없어도, 꽉 차도 안 생긴다
+	if spec.has("peak"):
+		var peak := float(spec["peak"])
+		var span: float = peak if raw < peak else maxf(1.0 - peak, 0.01)
+		raw = clampf(1.0 - absf(raw - peak) / span, 0.0, 1.0)
 	var from: float = float(spec["from"])
 	# from 위에서만 들어오는 겹이 있다 (폭우는 비가 센 것이다)
 	var strength: float = 0.0 if raw <= from else (raw - from) / maxf(1.0 - from, 0.01)
@@ -70,10 +82,16 @@ static func total_cover(axes: Dictionary) -> float:
 func build() -> void:
 	for spec in LAYERS:
 		var path: String = ROOT + String(spec["file"])
-		if not ResourceLoader.exists(path):
+		var texture: Texture2D = null
+		if ResourceLoader.exists(path):
+			texture = load(path)
+		elif String(spec["name"]) == "rays":
+			# 전용 도트가 아직 없다. 자리채움을 만들어 쓴다 — 파일이 들어오면 그쪽이 이긴다.
+			texture = PlaceholderArt.light_shaft_texture()
+		if texture == null:
 			continue
 		var sprite := Sprite2D.new()
-		sprite.texture = load(path)
+		sprite.texture = texture
 		if String(spec.get("blend", "")) == "add":
 			var material := CanvasItemMaterial.new()
 			material.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD

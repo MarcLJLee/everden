@@ -107,6 +107,39 @@ static func shadow_texture(width: int) -> ImageTexture:
 				img.set_pixel(x, y, Color(0, 0, 0, 0.28))
 	return ImageTexture.create_from_image(img)
 
+## 빛줄기 타일 — 구름 사이로 쏟아지는 선형 빛(박명광선). (BRIEF §6.8 이펙트 레이어)
+##
+## 전용 도트가 아직 없어서 절차적으로 만든다. `weather/light_shaft.png` 가 들어오면
+## 그쪽을 쓰고 이것은 안 쓰인다 (WeatherLayers 가 파일을 먼저 본다).
+##
+## ★ 이어 붙어야 한다 — 띠의 주기가 타일 크기를 나누어떨어져야 경계가 안 보인다.
+## ★ 농담은 **4×4 Bayer 디더**로 낸다. 알파 그러데이션은 도트가 아니다 (§6.8 도트 규칙).
+const BAYER4 := [
+	[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5],
+]
+
+static func light_shaft_texture(tile := 128, period := 32, slope := 2) -> ImageTexture:
+	var image := Image.create_empty(tile, tile, false, Image.FORMAT_RGBA8)
+	image.fill(Color(0, 0, 0, 0))
+	for y in tile:
+		for x in tile:
+			# 기울어진 띠. (x + slope*y) 가 주기를 돌면 대각선 줄이 된다.
+			var phase := float(posmod(x + slope * y, period)) / float(period)
+			# 띠 하나 안에서 **가운데가 화사하고 가장자리가 풀린다**
+			var core := pow(maxf(0.0, sin(phase * PI)), 3.2)
+			if core <= 0.02:
+				continue
+			# 디더 — 회색조 알파 대신 문턱을 넘는 픽셀만 찍는다
+			var threshold: float = (float(BAYER4[y % 4][x % 4]) + 0.5) / 16.0
+			if core < threshold:
+				continue
+			# 심지는 더 희게, 가장자리는 노란빛
+			var warmth := clampf(core, 0.0, 1.0)
+			image.set_pixel(x, y, Color(1.0, 0.97 - (1.0 - warmth) * 0.12,
+				0.80 - (1.0 - warmth) * 0.22, 1.0))
+	return ImageTexture.create_from_image(image)
+
+
 static func _rect_texture(size: Vector2i, color: Color) -> ImageTexture:
 	var img := Image.create_empty(maxi(size.x, 1), maxi(size.y, 1), false, Image.FORMAT_RGBA8)
 	img.fill(color)

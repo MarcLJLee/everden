@@ -868,6 +868,29 @@ func _test_presence(field) -> void:
 		field.sim.count_present() < field.sim.animals.size())
 
 	field._apply_daypart("낮")
+
+	# ★ 날씨가 **누가 나오는지**를 바꾼다 (BRIEF §6.8 · §7 에서 넘어온 값)
+	var all_species := DataLoader.load_all(false).species
+	var clear_sky := {"cloud": 0.15, "fog": 0.0, "rain": 0.0, "snow": 0.0, "wind": 0.3}
+	var rainy_sky := {"cloud": 0.32, "fog": 0.06, "rain": 0.62, "snow": 0.0, "wind": 0.38}
+	_check("두꺼비는 비 올 때 더 나온다",
+		schema.presence_chance(all_species["toad"], "여명", rainy_sky)
+			> schema.presence_chance(all_species["toad"], "여명", clear_sky) * 1.4)
+	_check("청설모는 비 올 때 덜 나온다",
+		schema.presence_chance(all_species["squirrel"], "여명", rainy_sky)
+			< schema.presence_chance(all_species["squirrel"], "여명", clear_sky) * 0.8)
+	# 맑은 날은 모두에게 평등하다 — 축이 0 이면 아무 영향이 없다
+	_check("축이 0 이면 날씨가 출현을 안 건드린다",
+		is_equal_approx(schema.weather_presence_factor(all_species["toad"],
+			{"cloud": 0.0, "fog": 0.0, "rain": 0.0, "snow": 0.0, "wind": 0.0}), 1.0))
+	# 아무 날씨에나 만날 수 있는 종이 늘 있어야 한다 — 0 으로 막지 않는다
+	var zeroed := PackedStringArray()
+	for id in all_species:
+		for axis in all_species[id].get("weather_likes", {}):
+			if float(all_species[id]["weather_likes"][axis]) <= 0.0:
+				zeroed.append("%s.%s" % [id, axis])
+	_check("어떤 종도 날씨로 완전히 막히지 않는다", zeroed.is_empty(), ", ".join(zeroed))
+
 	await process_frame
 
 

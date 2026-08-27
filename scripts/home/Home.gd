@@ -17,6 +17,7 @@ const HANGUL_FONT := "res://fonts/Galmuri11.ttf"
 @onready var _ground: Node2D = $World/Ground
 @onready var _yard_nodes: Node2D = $World/Yard
 @onready var _actors: Node2D = $World/Actors
+@onready var _weather_layers: WeatherLayers = $World/Weather
 @onready var _hud: Control = $Hud
 @onready var _coin_label: Label = $Hud/Coins
 @onready var _seat_label: Label = $Hud/Seats
@@ -37,6 +38,11 @@ var seats := 4
 
 var _rng := RandomNumberGenerator.new()
 var _leaving := false
+## 집은 **맑고 구름이 흐르는 정도**만 한다. 비도 안개도 오지 않는다 —
+## 마당은 보는 곳이지 견디는 곳이 아니다.
+var _sky := {"cloud": 0.18, "fog": 0.0, "rain": 0.0, "snow": 0.0, "wind": 0.28}
+var _sky_target := 0.18
+var _sky_hold := 0.0
 
 
 func _ready() -> void:
@@ -58,6 +64,7 @@ func _ready() -> void:
 		_place_objects()
 	_spawn_residents(result.species, view)
 	_spawn_player(view)
+	_weather_layers.build()
 	_hud.draw.connect(_hud_draw)
 	for label in [_coin_label, _seat_label]:
 		if ResourceLoader.exists(HANGUL_FONT):
@@ -153,9 +160,21 @@ func _process(delta: float) -> void:
 	player.move_vector = Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	for resident in residents:
 		resident.update(delta, objects, yard.yard, _rng)
+	_drift_sky(delta)
+	_weather_layers.update(delta, _sky, Rect2(Vector2.ZERO, Vector2(640, 360)))
 	_check_gate()
 	_refresh_hud()
 	_hud.queue_redraw()
+
+
+## 구름만 천천히 오간다. 필드처럼 프리셋을 걷지 않는다 — 집에 날씨가 필요한 이유는
+## 하늘이 멈춰 있지 않다는 것뿐이다.
+func _drift_sky(delta: float) -> void:
+	_sky_hold -= delta
+	if _sky_hold <= 0.0:
+		_sky_target = _rng.randf_range(0.08, 0.42)
+		_sky_hold = _rng.randf_range(18.0, 40.0)
+	_sky["cloud"] = move_toward(float(_sky["cloud"]), _sky_target, delta / 20.0)
 
 
 ## 대문으로 걸어 나가면 필드다. 열린 문이 곧 안내다 — 따로 묻지 않는다.

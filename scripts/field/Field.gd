@@ -43,6 +43,7 @@ var _clues: Array = []
 var _puffs: Array = []
 var _promotion_px := 0.0
 var _props: Array = []
+var _last_weather_name := ""
 var _clue_markers: Array = []
 var _palette_from := "day"
 var _palette_to := "day"
@@ -123,6 +124,7 @@ func _process(delta: float) -> void:
 	_age_puffs(delta)
 	weather.update(delta, tuning.weather_drift_seconds)
 	guide.set_weather_axes(weather.axes)
+	_follow_weather()
 	# 겹은 지금 화면이 덮는 월드 사각형 위에 얹는다. 액터 다음이라 캐릭터 위에도 떨어진다.
 	var half := get_viewport_rect().size / (2.0 * tuning.camera_zoom)
 	_weather_layers.update(delta, weather.axes,
@@ -415,7 +417,7 @@ func _apply_daypart(next: String) -> void:
 	# ★ 시간대는 감각 반경만 바꾸는 게 아니라 **누가 나와 있는가**를 바꾼다.
 	#   밤에만 나오는 동물은 낮에 아예 없다.
 	if schema != null:
-		for change in sim.apply_daypart(schema, daypart):
+		for change in sim.apply_daypart(schema, daypart, weather.axes):
 			if not change["was_visible"]:
 				continue
 			# 눈앞에서 사라졌다면 먼지를 남긴다. 그냥 없어지면 사라진 줄도 모른다.
@@ -428,6 +430,24 @@ func _apply_daypart(next: String) -> void:
 	_palette_to = _palette_of(daypart)
 	_palette_t = 0.0 if _palette_from != _palette_to else 1.0
 	guide.set_daypart(daypart)
+
+
+## 날씨가 **누가 나오는지**를 바꾼다. 축이 계속 흐르므로 매 프레임 다시 굴리면
+## 동물이 깜빡인다 — 날씨의 **이름이 바뀔 때만** 다시 정한다.
+func _follow_weather() -> void:
+	var name := weather.nickname()
+	if name == _last_weather_name:
+		return
+	_last_weather_name = name
+	for change in sim.apply_daypart(schema, daypart, weather.axes):
+		if not change["was_visible"]:
+			continue
+		var animal: FieldSim.WildAnimal = change["animal"]
+		_puffs.append({
+			"position": animal.position + Vector2(0, -10),
+			"age": 0.0,
+			"hiding": not change["present"],
+		})
 
 
 ## 지형 구성 — 어느 지형이 몇 타일인가. 날씨가 이걸 보고 어느 축을 세울지 정한다.

@@ -161,12 +161,12 @@ func invite(animal: WildAnimal) -> void:
 ## 시간대가 바뀌면 누가 나와 있는지 다시 정한다.
 ## 사라지는 것들은 노드를 내린다 — 낮에 박쥐가 서 있으면 안 된다.
 ## 방금 사라진/나타난 것들을 돌려준다 (먼지 이펙트를 띄우기 위해).
-func apply_daypart(schema: TagSchema, daypart: String) -> Array:
+func apply_daypart(schema: TagSchema, daypart: String, axes := {}) -> Array:
 	var changed: Array = []
 	for animal in animals:
 		if animal.invited:
 			continue
-		var chance := schema.presence_chance(animal.species, daypart)
+		var chance := schema.presence_chance(animal.species, daypart, axes)
 		var present := animal.presence_roll < chance
 		if present == animal.present:
 			continue

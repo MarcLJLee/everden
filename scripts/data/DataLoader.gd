@@ -155,6 +155,17 @@ static func _validate_species(species: Dictionary, schema: TagSchema, result: Re
 			result.warn("%s.quirk_count 최대 %d 가 quirk_pool(%d개)보다 큽니다 — 풀만큼만 나옵니다"
 				% [id, int(count[1]), species.get("quirk_pool", []).size()])
 
+	# 날씨 취향 — 축 이름은 weather.json 의 다섯 축이어야 한다
+	const WEATHER_AXES := ["cloud", "fog", "rain", "snow", "wind"]
+	for axis in species.get("weather_likes", {}):
+		if not (String(axis) in WEATHER_AXES):
+			result.error("%s.weather_likes 에 모르는 날씨 축 '%s' 가 있습니다 (가능: %s)"
+				% [id, axis, ", ".join(PackedStringArray(WEATHER_AXES))])
+		elif float(species["weather_likes"][axis]) <= 0.0:
+			# 0 으로 막으면 "이 날씨엔 절대 안 나온다"가 되어 기다림을 강요한다
+			result.error("%s.weather_likes.%s 는 0 보다 커야 합니다 — 아무 날씨에나 만날 수 있어야 합니다"
+				% [id, axis])
+
 	# presence — 종이 활동 조건을 직접 들 수 있다. 키와 범위를 본다.
 	for daypart in species.get("presence", {}):
 		var known := schema.dayparts()

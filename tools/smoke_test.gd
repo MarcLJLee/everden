@@ -943,58 +943,71 @@ func _test_weather(field) -> void:
 		"한 프레임 최대 %.1fpx (300초 경과 뒤)" % worst_jump)
 	_check("잰 겹이 있다", watched > 0, "%d 회" % watched)
 
-	# ★ 눈은 앞뒤로 겹쳐야 깊이가 산다. 그리고 함박눈에도 화면이 하얘지면 안 된다.
-	var snow_layers := 0
+	# ★ 눈만 타일이 아니라 **낱개**로 그린다. 타일로 만들었다가 셋이 한꺼번에 어긋났다:
+	#   같은 배열이 반복돼 패턴이 읽히고, 2×2 를 2배로 키워 덩어리가 되고,
+	#   타일이 통째로 움직여 모든 눈이 한 몸처럼 흔들렸다 (전부 사용자 지적).
 	for spec in WeatherLayers.LAYERS:
-		if String(spec["axis"]) == "snow":
-			snow_layers += 1
-	_check("눈이 앞뒤로 겹쳐 있다", snow_layers >= 2, "%d 겹" % snow_layers)
-	# ★ 눈은 비가 아니다 — 훨씬 느리게 내리고 좌우로 흔들린다 (사용자 지적)
-	var fastest_snow := 0.0
-	var slowest_rain := 9999.0
-	var swaying := 0
-	for spec in WeatherLayers.LAYERS:
-		var fall: float = float((spec["drift"] as Vector2).y)
-		if String(spec["axis"]) == "snow":
-			fastest_snow = maxf(fastest_snow, fall)
-			if spec.has("sway"):
-				swaying += 1
-		elif String(spec["axis"]) == "rain":
-			slowest_rain = minf(slowest_rain, fall)
-	_check("가장 빠른 눈이 가장 느린 비보다 느리다", fastest_snow < slowest_rain * 0.5,
-		"눈 %.0f · 비 %.0f px/s" % [fastest_snow, slowest_rain])
-	_check("눈 겹은 모두 좌우로 흔들린다", swaying == snow_layers,
-		"%d / %d 겹" % [swaying, snow_layers])
-	# 흔들림은 제자리에서 오가야 한다 — 쌓이면 눈이 옆으로 흘러가 버린다
-	var sway_axes := {"cloud": 0.4, "fog": 0.0, "rain": 0.0, "snow": 1.0, "wind": 0.0}
-	var sway_bench := WeatherLayers.new()
-	root.add_child(sway_bench)
-	sway_bench.build()
-	var swept := 0.0
-	for spec in WeatherLayers.LAYERS:
-		if not spec.has("sway"):
-			continue
-		swept = maxf(swept, float(spec["sway"]["amount"]))
-	var seen_x := {"min": 1e9, "max": -1e9}
-	for i in 1200:
-		sway_bench.update(1.0 / 60.0, sway_axes, bench_view)
-		for entry in sway_bench._sprites:
-			if String(entry["spec"]["name"]) != "snow_near":
-				continue
-			# 아래로 흐르는 몫을 빼면 남는 것이 흔들림이다
-			var only_sway: float = entry["node"].region_rect.position.x \
-				+ float((entry["spec"]["drift"] as Vector2).x) * (float(i) / 60.0)
-			seen_x["min"] = minf(seen_x["min"], only_sway)
-			seen_x["max"] = maxf(seen_x["max"], only_sway)
-	_check("흔들림은 제자리에서 오간다 — 쌓이지 않는다",
-		seen_x["max"] - seen_x["min"] < swept * 2.5 + 4.0,
-		"폭 %.1fpx (흔들림 상한 %.0f)" % [seen_x["max"] - seen_x["min"], swept])
-	sway_bench.queue_free()
-	await process_frame
-	var snowy: float = WeatherLayers.total_cover(
-		{"cloud": 0.4, "fog": 0.18, "rain": 0.0, "snow": 1.0, "wind": 0.24})
-	_check("함박눈에도 화면이 덮이지 않는다", snowy < 0.4, "%.0f%% 덮임" % (snowy * 100.0))
-	_check("함박눈은 눈에 보인다", snowy > 0.05, "%.1f%%" % (snowy * 100.0))
+		_check("눈은 타일 겹에 없다 — %s" % spec["name"], String(spec["axis"]) != "snow")
+	var snow: SnowField = field.get_node("Snow")
+	_check("눈은 낱개로 그린다", snow != null and snow._flakes.size() > 100,
+		"%d 송이" % (snow._flakes.size() if snow else 0))
+	if snow:
+		# 흔들림이 눈송이마다 달라야 한 몸으로 안 논다
+		var flake_phases := {}
+		var flake_periods := {}
+		var sizes := {}
+		for flake in snow._flakes:
+			flake_phases[snapped(float(flake["phase"]), 0.05)] = true
+			flake_periods[snapped(float(flake["period"]), 0.05)] = true
+			sizes[int(flake["size"])] = true
+		# 0.05 로 끊으면 위상 칸은 TAU/0.05 ≈ 126 개뿐이다. 칸을 골고루 채웠는지 본다.
+		var crowd := {}
+		var worst_crowd := 0
+		for flake in snow._flakes:
+			var slot: float = snapped(float(flake["phase"]), 0.05)
+			crowd[slot] = int(crowd.get(slot, 0)) + 1
+			worst_crowd = maxi(worst_crowd, int(crowd[slot]))
+		_check("눈송이마다 흔들리는 위상이 다르다", flake_phases.size() > 100,
+			"%d 칸" % flake_phases.size())
+		_check("한 위상에 눈이 몰리지 않는다",
+			float(worst_crowd) / float(snow._flakes.size()) < 0.05,
+			"가장 몰린 칸 %d / %d" % [worst_crowd, snow._flakes.size()])
+		_check("눈송이마다 흔들리는 주기가 다르다", flake_periods.size() > 20,
+			"%d 종" % flake_periods.size())
+		_check("눈송이 크기가 섞인다 — 키운 게 아니라 큰 게 섞인 것이다",
+			sizes.size() >= 3, "%s px" % [sizes.keys()])
+		_check("눈을 그리는 노드를 키우지 않는다 — 키우면 도트가 뭉친다",
+			snow.scale.is_equal_approx(Vector2.ONE), "%s" % snow.scale)
+
+		# 함박눈이 화면을 하얗게 덮으면 안 된다. 실제로 몇 픽셀을 칠하는지 센다.
+		var painted := 0
+		for flake in snow._flakes:
+			if float(flake["at"]) < 1.0:
+				painted += int(flake["size"]) * int(flake["size"])
+		var snow_cover := float(painted) / (SnowField.PERIOD.x * SnowField.PERIOD.y)
+		_check("함박눈에도 화면이 덮이지 않는다", snow_cover < 0.10,
+			"%.1f%% 덮임" % (snow_cover * 100.0))
+		_check("함박눈은 눈에 보인다", snow_cover > 0.005, "%.2f%%" % (snow_cover * 100.0))
+
+		# ⚠️ 자리는 월드에 고정된다 — 화면 기준으로 감으면 카메라를 따라 눈이 끌려다닌다
+		var here := Rect2(Vector2(1000.0, 700.0), Vector2(320.0, 180.0))
+		snow.update(0.0, 1.0, 0.3, here)
+		var world_before: Vector2 = snow._flakes[0]["pos"]
+		snow.update(0.0, 1.0, 0.3, here.grow(-30.0))
+		_check("눈은 카메라가 아니라 땅 위에 있다",
+			snow._flakes[0]["pos"].is_equal_approx(world_before))
+
+		# 눈이 세질수록 더 많이 나온다 — 한꺼번에 켜지면 스위치로 보인다
+		var thin := 0
+		var thick := 0
+		for flake in snow._flakes:
+			if float(flake["at"]) < 0.35:
+				thin += 1
+			if float(flake["at"]) < 1.0:
+				thick += 1
+		_check("진눈깨비보다 함박눈이 많이 온다", thick > thin * 2, "%d → %d 송이" % [thin, thick])
+
+	# 눈 덮개는 SnowField 쪽에서 잰다 — 타일 겹에는 이제 눈이 없다.
 
 	# ★ 빛줄기는 점심 무렵에만 선다 — 기둥이 수직에서 27° 라 해가 높이 떠야 나온다
 	var noon_alpha := 0.0

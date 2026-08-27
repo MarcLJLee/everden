@@ -19,6 +19,7 @@ const DAYPARTS := ["낮", "여명", "밤"]
 const WEATHER_MARGIN := 1.6
 
 @onready var _weather_layers: WeatherLayers = $Weather
+@onready var _snow: SnowField = $Snow
 @onready var _camera: Camera2D = $Camera2D
 @onready var _overlay = $DebugOverlay
 @onready var _modulate: CanvasModulate = $CanvasModulate
@@ -148,6 +149,8 @@ func _process(delta: float) -> void:
 	_weather_layers.update(delta, weather.axes, weather_view_rect(),
 		float(tuning.daypart_daylight.get(daypart, 1.0)),
 		float(tuning.daypart_sun_height.get(daypart, 1.0)))
+	_snow.update(delta, float(weather.axes.get("snow", 0.0)),
+		float(weather.axes.get("wind", 0.3)), camera_visible_rect())
 	_advance_palette(delta)
 	_apply_eyeshine()
 	_update_interaction(delta)

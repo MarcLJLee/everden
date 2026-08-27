@@ -6,6 +6,7 @@
 [ext_resource type="Resource" path="res://tuning/field_tuning.tres" id="4_tuning"]
 [ext_resource type="PackedScene" path="res://scenes/ui/DebugOverlay.tscn" id="5_overlay"]
 [ext_resource type="Script" path="res://scripts/field/WeatherLayers.gd" id="6_weather"]
+[ext_resource type="Script" path="res://scripts/field/SnowField.gd" id="9_snow"]
 
 [node name="Field" type="Node2D"]
 script = ExtResource("1_field")
@@ -20,6 +21,9 @@ y_sort_enabled = true
 
 [node name="Weather" type="Node2D" parent="."]
 script = ExtResource("6_weather")
+
+[node name="Snow" type="Node2D" parent="."]
+script = ExtResource("9_snow")
 
 [node name="Markers" type="Node2D" parent="."]
 

@@ -63,25 +63,7 @@ const LAYERS := [
 	# ★ 눈은 **앞뒤로 겹쳐야** 깊이가 산다. 한 겹이면 창문에 붙은 점으로 보인다.
 	#   멀수록 느리고 옅다. 가장 앞 겹은 같은 도트를 2배로 키운 것이라 도트가 늘지 않는다.
 	#   ⚠️ 비와 달리 눈은 **바람에 옆으로 밀린다.** 떨어지는 속도보다 바람이 더 크게 먹는다.
-	#   ⚠️ 눈은 **비가 아니다.** 처음엔 비의 속도를 그대로 줄여 썼더니 직선으로 내려꽂혀
-	#      비처럼 보였다 (사용자 지적). 눈은 훨씬 느리고, 떨어지면서 **좌우로 흔들린다**.
-	#      그 흔들림이 `sway` 다 — 쌓이지 않고 제자리에서 오간다.
-	{"name": "snow_far", "file": "snow_far.png", "axis": "snow", "base": 0.0, "gain": 0.85,
-		"drift": Vector2(2.0, 11.0), "wind": 14.0, "from": 0.0, "cover": 0.003,
-		"sway": {"amount": 5.0, "period": 6.5, "phase": 0.0}},
-	# 같은 도트를 위상만 어긋나게 해서 한 겹 더 — 함박눈은 성기면 함박눈이 아니다
-	{"name": "snow_mid", "file": "snow_far.png", "axis": "snow", "base": 0.0, "gain": 0.9,
-		"drift": Vector2(2.5, 16.0), "wind": 20.0, "from": 0.08, "cover": 0.003,
-		"sway": {"amount": 7.0, "period": 4.7, "phase": 2.4},
-		"phase": Vector2(37.0, 71.0)},
-	{"name": "snow_near", "file": "snow_near.png", "axis": "snow", "base": 0.0, "gain": 0.95,
-		"drift": Vector2(3.5, 23.0), "wind": 28.0, "from": 0.12, "cover": 0.006,
-		"sway": {"amount": 9.0, "period": 3.9, "phase": 1.1}},
-	# 가장 앞 겹은 크고 **흐릿하다** — 초점이 안 맞은 자리라 진하면 얼룩으로 보인다
-	{"name": "snow_big", "file": "snow_near.png", "axis": "snow", "base": 0.0, "gain": 0.5,
-		"drift": Vector2(5.0, 34.0), "wind": 40.0, "from": 0.55, "cover": 0.024, "scale": 2,
-		"sway": {"amount": 13.0, "period": 3.1, "phase": 3.7},
-		"phase": Vector2(53.0, 29.0)},
+	# 눈은 여기 없다 — 낱개가 눈에 보이는 유일한 날씨라 SnowField 가 낱개로 그린다.
 ]
 
 var _sprites: Array = []

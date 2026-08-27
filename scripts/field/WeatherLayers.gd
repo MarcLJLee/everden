@@ -22,14 +22,14 @@ const ROOT := "res://sprites/extracted/weather/"
 ##   세기는 **알파**로 준다. weather.json 의 "multiply/alpha" 에서 alpha 쪽이다.
 const LAYERS := [
 	{"name": "cloud", "file": "cloud_shadow.png", "axis": "cloud", "base": 0.06, "gain": 0.34,
-		"drift": Vector2(9.0, 3.0), "wind": 26.0, "from": 0.0, "cover": 0.53},
+		"drift": Vector2(7.0, 2.0), "wind": 26.0, "from": 0.0, "cover": 0.53},
 	{"name": "fog", "file": "fog.png", "axis": "fog", "base": 0.0, "gain": 0.72,
 		"drift": Vector2(4.0, 1.0), "wind": 10.0, "from": 0.0, "cover": 0.58},
 	{"name": "rain", "file": "rain.png", "axis": "rain", "base": 0.0, "gain": 0.85,
-		"drift": Vector2(-14.0, 260.0), "wind": 150.0, "from": 0.0, "cover": 0.06},
+		"drift": Vector2(6.0, 260.0), "wind": 150.0, "from": 0.0, "cover": 0.06},
 	# 폭우는 별개 날씨가 아니라 rain 이 센 것이다 — 센 겹은 늦게 들어온다
 	{"name": "rain_heavy", "file": "rain_heavy.png", "axis": "rain", "base": 0.0, "gain": 0.8,
-		"drift": Vector2(-22.0, 380.0), "wind": 210.0, "from": 0.55, "cover": 0.20},
+		"drift": Vector2(10.0, 380.0), "wind": 210.0, "from": 0.55, "cover": 0.20},
 ]
 
 var _sprites: Array = []
@@ -86,6 +86,9 @@ func update(delta: float, axes: Dictionary, view: Rect2) -> void:
 
 		var drift: Vector2 = spec["drift"]
 		var travel := drift * _elapsed + Vector2(float(spec["wind"]) * wind * _elapsed, 0.0)
+		# ⚠️ region 을 **빼야** 무늬가 그 방향으로 흐른다.
+		#    더하면 텍스처의 아래쪽을 화면 위에서 샘플링하게 되어 비가 위로 올라간다
+		#    (실제로 그렇게 만들었다). drift 는 이제 **화면에서 보이는 방향**이다.
 		# ⚠️ 정수 픽셀로만. 반픽셀이면 디더가 자글거린다.
 		sprite.position = view.position.floor()
-		sprite.region_rect = Rect2((view.position + travel).floor(), view.size.ceil())
+		sprite.region_rect = Rect2((view.position - travel).floor(), view.size.ceil())

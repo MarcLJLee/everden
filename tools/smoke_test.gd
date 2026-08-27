@@ -754,6 +754,33 @@ func _test_weather(field) -> void:
 	# 구름 그림자는 맑은 날에도 켜져 있다 — 날씨가 "없는" 상태를 만들지 않는 장치다
 	_check("맑은 날에도 구름 그림자는 흐른다", clear > 0.02, "%.0f%%" % (clear * 100.0))
 
+	# ★ 실제 날씨는 튀지 않는다 — 지금과 가까운 상태로만 옮겨간다 (사용자 지적)
+	var walker := WeatherSystem.new()
+	walker.setup(schema, RandomNumberGenerator.new(), {"초원": 2000, "숲": 600})
+	walker.axes = {"cloud": 0.15, "fog": 0.0, "rain": 0.0, "snow": 0.0, "wind": 0.3}
+	var jumped := 0
+	for i in 200:
+		walker._pick_target()
+		if float(walker.target.get("rain", 0.0)) >= 0.9:
+			jumped += 1
+	_check("맑음에서 폭우로 바로 가지 않는다", jumped == 0, "%d/200 회" % jumped)
+
+	# 멀리 있는 상태일수록 옮겨가는 데 오래 걸린다 (속도가 일정하므로 저절로)
+	walker.axes["rain"] = 0.0
+	walker.target = {"cloud": 0.15, "fog": 0.0, "rain": 0.2, "snow": 0.0, "wind": 0.3}
+	var short_ticks := 0
+	while float(walker.axes["rain"]) < 0.199 and short_ticks < 2000:
+		walker.update(0.1, 22.0)
+		short_ticks += 1
+	walker.axes["rain"] = 0.0
+	walker.target["rain"] = 0.8
+	var long_ticks := 0
+	while float(walker.axes["rain"]) < 0.799 and long_ticks < 2000:
+		walker.update(0.1, 22.0)
+		long_ticks += 1
+	_check("크게 바뀔수록 오래 걸린다", long_ticks > short_ticks * 3,
+		"0.2까지 %d틱 · 0.8까지 %d틱" % [short_ticks, long_ticks])
+
 	# 어떤 지형도 축을 0 으로 막지 않는다 — 기다림을 강요하게 된다
 	var blocked := PackedStringArray()
 	for terrain_name in schema.weather_bias:

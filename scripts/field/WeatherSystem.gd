@@ -13,6 +13,11 @@ extends RefCounted
 const DATA_PATH := "res://sprites/extracted/weather/weather.json"
 ## 틴트가 당겨가는 색. 축의 합만큼 이쪽으로 간다 (weather.json 의 tint_from_axes).
 const TINT_TOWARD := Color(0.66, 0.73, 0.88)
+## ★ 맑은 날의 출발점. 흰색이 아니라 **살짝 밝고 따뜻하다** —
+##   흰색에서 시작하면 맑은 날이 "아무 일도 없는 날"로 보인다.
+##   맑음도 하나의 날씨이므로 그 나름의 얼굴이 있어야 한다.
+##   1.0 을 넘겨 곱하면 밝아진다. 도트가 날아가지 않게 조금만.
+const TINT_CLEAR := Color(1.09, 1.05, 0.97)
 
 var axes := {"cloud": 0.15, "fog": 0.0, "rain": 0.0, "snow": 0.0, "wind": 0.3}
 var target := {}
@@ -84,7 +89,14 @@ func _pick_target() -> void:
 			fit += value * (float(weights.get(axis, 1.0)) - 1.0)
 		# 지형 영향을 약하게 주면 "물가에선 안개가 잦다"를 아이가 못 배운다 —
 		# 재보니 1.5 에서는 33% 대 24% 라 알아챌 수 없었다. 세게 준다.
-		var weight := (1.0 / (1.0 + intensity * 1.6)) * exp(fit * 4.0)
+		# ★ 실제 날씨는 튀지 않는다. **지금과 가까운 상태로만 옮겨간다** —
+		#   맑음에서 폭우로 바로 가면 그건 날씨가 아니라 스위치다.
+		#   맑음 → 구름조금 → 흐림 → 가랑비 → 비 로 걸어가야 한다.
+		var distance := 0.0
+		for axis in axes:
+			distance += pow(float(preset.get(axis, 0.0)) - float(axes[axis]), 2.0)
+		var nearness := exp(-distance / 0.16)
+		var weight := (1.0 / (1.0 + intensity * 1.6)) * exp(fit * 4.0) * nearness
 		if String(name) == _last_name:
 			weight *= 0.2
 		entries.append({"name": String(name), "weight": weight})
@@ -151,7 +163,7 @@ func nickname_of(values: Dictionary) -> String:
 func tint() -> Color:
 	var pull := clampf(float(axes["cloud"]) * 0.9 + float(axes["rain"]) * 0.55
 		+ float(axes["snow"]) * 0.18 + float(axes["fog"]) * 0.2, 0.0, 1.0)
-	return Color.WHITE.lerp(TINT_TOWARD, pull)
+	return TINT_CLEAR.lerp(TINT_TOWARD, pull)
 
 
 ## 이 감각이 지금 날씨에서 얼마나 깎이는가

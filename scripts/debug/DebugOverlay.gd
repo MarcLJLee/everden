@@ -32,6 +32,10 @@ func refresh(state: Dictionary) -> void:
 	lines.append("시간대: %s   [T] 전환   ·   발밑: %s   ·   승격 %.0f타일" % [
 		state["daypart"], state["terrain"], state["promotion_tiles"]])
 	lines.append("감각 반경: %s" % state["senses"])
+	var roster: PackedStringArray = []
+	for name in state["roster"]:
+		roster.append("%s %d" % [name, state["roster"][name]])
+	lines.append("이번 원정: %s" % (", ".join(roster) if not roster.is_empty() else "(비었다)"))
 	lines.append("동물: 나와있음 %d/%d · 보임 %d · 단서만 %d · 활성 %d · 얕은시뮬 %d" % [
 		state["present_count"], state["total_count"],
 		state["visible_count"], state["clues"].size(),

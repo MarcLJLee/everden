@@ -13,6 +13,7 @@ const SUPPORTED_BEHAVIOR_SCHEMA := 1
 
 const TAGS_PATH := "res://data/tags.json"
 const ANIMALS_PATH := "res://data/animals.json"
+const REGIONS_PATH := "res://data/regions.json"
 
 ## 종 정의에 반드시 있어야 하는 필드
 const REQUIRED_FIELDS := [
@@ -34,6 +35,7 @@ class Result extends RefCounted:
 	var warnings := PackedStringArray()
 	var schema: TagSchema = null
 	var species := {}  ## id -> Dictionary (검증·보정을 마친 종 정의)
+	var regions := {}  ## id -> Dictionary (지역 생태)
 
 	func reject(reason: String) -> void:
 		ok = false
@@ -89,9 +91,37 @@ static func load_all(prototype_only := true, tags_path := TAGS_PATH, animals_pat
 		if result.ok:
 			result.species[String(species["id"])] = species
 
+	_load_regions(result, prototype_only)
+
 	if not result.ok:
 		result.species.clear()
+		result.regions.clear()
 	return result
+
+
+## 지역 생태 — 어느 종이 이 지역에 얼마나 있는가. 없어도 게임은 돈다(전 종이 기본값).
+static func _load_regions(result: Result, prototype_only: bool) -> void:
+	if not FileAccess.file_exists(REGIONS_PATH):
+		result.warn("지역 파일이 없습니다 — 모든 종이 기본 마릿수로 나옵니다")
+		return
+	var parsed = JSON.parse_string(FileAccess.get_file_as_string(REGIONS_PATH))
+	if typeof(parsed) != TYPE_DICTIONARY:
+		result.reject("JSON 파싱 실패: " + REGIONS_PATH)
+		return
+	for entry in parsed.get("regions", []):
+		var region: Dictionary = entry
+		var id := String(region.get("id", ""))
+		if id.is_empty():
+			result.error("지역에 id 가 없습니다")
+			continue
+		for species_id in region.get("ecology", {}):
+			if not result.species.has(String(species_id)):
+				# prototype 만 불러왔으면 없는 게 정상이다. 전체를 불렀는데 없으면 오타다.
+				if not prototype_only:
+					result.error("%s 지역의 '%s' 는 종 데이터에 없습니다" % [id, species_id])
+			elif float(region["ecology"][species_id]) < 0.0:
+				result.error("%s.ecology.%s 는 0 보다 작을 수 없습니다" % [id, species_id])
+		result.regions[id] = region
 
 
 static func _read_json(path: String, result: Result) -> Dictionary:

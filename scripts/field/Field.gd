@@ -44,6 +44,8 @@ var _puffs: Array = []
 var _promotion_px := 0.0
 var _props: Array = []
 var _last_weather_name := ""
+## 지금 원정 중인 지역. 세계 지도가 생기면 거기서 정해진다 (BRIEF §3.9).
+@export var region_id := "home_hills"
 var _clue_markers: Array = []
 var _palette_from := "day"
 var _palette_to := "day"
@@ -71,11 +73,14 @@ func _ready() -> void:
 	for name in schema.terrain_walkable:
 		if not schema.walkable(String(name)):
 			terrain.blocked_terrains.append(String(name))
-	terrain.generate(tuning.map_size, tile, {
-		"숲": tuning.forest_patches,
-		"물가": tuning.water_patches,
-		"바위": tuning.rock_patches,
-	}, _rng)
+	# ★ 지형은 **지역이 정한다.** 모든 필드에 물가가 조금씩 섞이면
+	#   뒷산에 늘 개울이 있는 셈이 되어 "뒷산에 수달이 산다"가 되어버린다.
+	var region: Dictionary = result.regions.get(region_id, {})
+	var shape: Dictionary = region.get("terrain", {})
+	var patches: Dictionary = shape.get("patches", {
+		"숲": tuning.forest_patches, "물가": tuning.water_patches, "바위": tuning.rock_patches,
+	})
+	terrain.generate(tuning.map_size, tile, patches, _rng, String(shape.get("base", "초원")))
 	_ground.setup(tuning, terrain)
 	_props = PropScatter.scatter(_actors, terrain, tuning, _rng)
 	_camera.zoom = Vector2.ONE * tuning.camera_zoom
@@ -93,6 +98,8 @@ func _ready() -> void:
 		companion.confine = _terrain_confine(companion)
 	_promotion_px = _promotion_radius_px()
 	sim.setup(_actors, actor_scene, schema, tuning, _rng, _bounds, terrain, _promotion_px)
+	# 이 필드가 어느 지역인가. 지역이 늘면 여기만 갈아끼운다.
+	sim.region = region
 
 	_target_species = _collect_targets(result.species)
 	sim.spawn(_target_species, player.position)
@@ -511,6 +518,7 @@ func _build_state() -> Dictionary:
 		"weather_axes": weather.axes,
 		"weather_summary": weather.summary(),
 		"present_count": sim.count_present(),
+		"roster": sim.roster(),
 		"total_count": sim.animals.size(),
 		"active_count": sim.count_active(),
 		"shallow_count": sim.count_shallow(),

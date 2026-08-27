@@ -17,11 +17,12 @@ var _tiles := PackedStringArray()
 ## 못 밟는 지형 이름들. 이것들은 얇게 찍는다 — 두꺼우면 안에 선 동물을 부를 수 없다.
 var blocked_terrains: Array = []
 
-func generate(map_size: Vector2i, tile_px: int, patches: Dictionary, rng: RandomNumberGenerator) -> void:
+func generate(map_size: Vector2i, tile_px: int, patches: Dictionary, rng: RandomNumberGenerator,
+		base := BASE) -> void:
 	size = map_size
 	tile_size = tile_px
 	_tiles.resize(size.x * size.y)
-	_tiles.fill(BASE)
+	_tiles.fill(base)
 	for terrain in patches:
 		# 못 밟는 지형은 얇게. 통행 규칙은 tags.json 이 갖고 있지만
 		# 여기서는 이름만으로 판단하지 않도록 호출자가 넘긴 목록을 쓴다.

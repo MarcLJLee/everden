@@ -45,6 +45,7 @@ func _run() -> void:
 	await _test_weather(field)
 	await _test_presence(field)
 	await _test_individuals(field)
+	await _test_roster(field)
 	await _test_eyeshine(field)
 	await _test_puff(field)
 	await _test_invite(field)
@@ -608,20 +609,22 @@ func _test_terrain_walk(field) -> void:
 	_check("초원·숲은 누구나 지나간다", schema.walkable("초원") and schema.walkable("숲"))
 	_check("물가·바위는 기본으로 막힌다", not schema.walkable("물가") and not schema.walkable("바위"))
 
-	var water := _find_terrain_point(field, "물가")
-	var meadow := _find_terrain_point(field, "초원")
-	if water == Vector2.INF or meadow == Vector2.INF:
-		_check("지형 통행 테스트 준비 — 물가와 초원이 있다", false)
-		return
+	# ⚠️ 무작위 필드에 기대면 물가가 한 타일도 없는 원정에서 이 검사가 통째로 사라진다
+	#    (지역이 개울을 한 줄기만 찍는다). 판을 직접 깔고 잰다 — 같은 실수를 네 번 했다.
+	var bench0 := TerrainMap.new()
+	bench0.generate(Vector2i(8, 8), 16, {}, RandomNumberGenerator.new(), "초원")
+	bench0.set_tile(Vector2i(4, 4), "물가")
+	bench0.set_tile(Vector2i(6, 4), "바위")
+	var water := (Vector2(4, 4) + Vector2(0.5, 0.9)) * 16
+	var rock := (Vector2(6, 4) + Vector2(0.5, 0.9)) * 16
+	var meadow := (Vector2(1, 1) + Vector2(0.5, 0.9)) * 16
 
-	_check("수달은 물가에 들어간다", map.can_stand(water, schema, ["물가"]))
-	_check("개는 물가에 못 들어간다", not map.can_stand(water, schema, ["초원", "숲"]))
-	_check("고양이는 바위에 들어간다",
-		map.can_stand(_find_terrain_point(field, "바위"), schema, ["초원", "숲", "바위"])
-		or _find_terrain_point(field, "바위") == Vector2.INF)
-	_check("청설모(숲)도 초원은 지나간다", map.can_stand(meadow, schema, ["숲"]))
+	_check("수달은 물가에 들어간다", bench0.can_stand(water, schema, ["물가"]))
+	_check("개는 물가에 못 들어간다", not bench0.can_stand(water, schema, ["초원", "숲"]))
+	_check("고양이는 바위에 들어간다", bench0.can_stand(rock, schema, ["초원", "숲", "바위"]))
+	_check("청설모(숲)도 초원은 지나간다", bench0.can_stand(meadow, schema, ["숲"]))
 	_check("플레이어는 habitat 이 없어 물가에 못 들어간다",
-		not map.can_stand(water, schema, []))
+		not bench0.can_stand(water, schema, []))
 
 	# 막히면 미끄러진다 — 그냥 되돌리면 비스듬히 붙었을 때 갇힌 것처럼 느껴진다.
 	# 무작위 지형에 기대면 검사가 조용히 건너뛰어진다. 판을 직접 깔고 잰다.
@@ -949,6 +952,50 @@ func _test_individuals(field) -> void:
 	await process_frame
 
 
+## ★ 개체 정의는 필드에 들어갈 때 한 번뿐이다 (BRIEF §3.11 1단계)
+func _test_roster(field) -> void:
+	var loaded := DataLoader.load_all(false)
+	var rng := RandomNumberGenerator.new()
+	var mix := {"초원": 1800, "숲": 900, "물가": 200, "바위": 76}
+	var here: Dictionary = loaded.regions.get("home_hills", {})
+	_check("지역 생태 데이터가 있다", not here.get("ecology", {}).is_empty())
+
+	# ★ 같은 종이라도 지역마다 마릿수가 다르다 (사용자 지적)
+	var downstream := {"ecology": {"otter": 5.0, "squirrel": 0.4}}
+	var otter_here := 0
+	var otter_there := 0
+	var squirrel_here := 0
+	var squirrel_there := 0
+	for i in 300:
+		otter_here += FieldSim.roster_count(loaded.species["otter"], mix, here, 3, rng)
+		otter_there += FieldSim.roster_count(loaded.species["otter"], mix, downstream, 3, rng)
+		squirrel_here += FieldSim.roster_count(loaded.species["squirrel"], mix, here, 3, rng)
+		squirrel_there += FieldSim.roster_count(loaded.species["squirrel"], mix, downstream, 3, rng)
+	_check("수달은 하류 지역에 훨씬 많다", otter_there > otter_here * 1.5,
+		"뒷산 %.1f · 하류 %.1f" % [otter_here / 300.0, otter_there / 300.0])
+	_check("청설모는 뒷산에 훨씬 많다", squirrel_here > squirrel_there * 1.5,
+		"뒷산 %.1f · 하류 %.1f" % [squirrel_here / 300.0, squirrel_there / 300.0])
+	_check("지역 생태에 없는 종은 그 지역에 0마리",
+		FieldSim.roster_count(loaded.species["leopard_cat"], mix, downstream, 3, rng) == 0)
+
+	# ★ 개체수 0 은 정상이다 — "조건을 다 맞췄는데 왜 없지"의 정직한 답
+	var dry := {"초원": 2900, "숲": 76}
+	var zeros := 0
+	for i in 300:
+		if FieldSim.roster_count(loaded.species["otter"], dry, here, 3, rng) == 0:
+			zeros += 1
+	_check("서식지가 없는 필드에서는 0마리가 흔하다", zeros > 100, "%d/300 회" % zeros)
+
+	# ★ 날씨가 바뀌어도 개체는 늘지도 줄지도 않는다 — 바뀌는 것은 나와 있는가뿐이다
+	var before: int = field.sim.animals.size()
+	field.weather.axes = {"cloud": 0.32, "fog": 0.06, "rain": 0.62, "snow": 0.0, "wind": 0.38}
+	field._last_weather_name = ""
+	field._follow_weather()
+	_check("날씨가 바뀌어도 개체 수는 그대로다", field.sim.animals.size() == before,
+		"%d → %d" % [before, field.sim.animals.size()])
+	await process_frame
+
+
 ## ★ 어두울 때 눈이 되비춘다 — 종이 아니라 activity 로 (사용자 요청)
 func _test_eyeshine(field) -> void:
 	var schema: TagSchema = field.schema
@@ -1046,13 +1093,12 @@ func _test_invite(field) -> void:
 
 # --- 도우미 ---------------------------------------------------------------
 
+## 종 정의를 집어 온다. **필드에 그 종이 0마리일 수 있으므로**(지역 생태 — BRIEF §3.11)
+## 스폰된 동물만 뒤지면 검사가 지역 추첨에 따라 흔들린다. 데이터에서 직접 본다.
 func _species_of(field, id: String) -> Dictionary:
-	for animal in field.sim.animals:
-		if animal.species.get("id") == id:
-			return animal.species
-	for companion in field.companions:
-		if companion.species_id == id:
-			return companion.species
+	var loaded := DataLoader.load_all(false)
+	if loaded.species.has(id):
+		return loaded.species[id]
 	return {}
 
 func _puff_near(field, position: Vector2, hiding: bool) -> bool:
@@ -1078,14 +1124,27 @@ func _find_terrain_point(field, terrain_name: String) -> Vector2:
 	return best
 
 
-## 특정 종을 집어 오는 헬퍼. 지금 시간대에 안 나와 있을 수 있으므로 세워서 준다 —
-## 여기서 검사하는 것은 노출·교감이지 존재 규칙이 아니다 (그건 _test_presence 가 본다).
+## 특정 종을 집어 오는 헬퍼.
+##
+## ⚠️ 두 가지가 검사를 조용히 없앤다:
+##    ① 지금 시간대에 안 나와 있을 수 있다 → 세워서 준다
+##    ② **지역 생태 때문에 이번 원정에 0 마리일 수 있다** (BRIEF §3.11) → 만들어서 준다
+##    여기서 검사하는 것은 노출·교감이지 존재 규칙이 아니다 (그건 _test_presence 가 본다).
 func _find_animal(field, id: String) -> FieldSim.WildAnimal:
 	for animal in field.sim.animals:
 		if animal.species.get("id") == id and not animal.invited:
 			animal.present = true
 			return animal
-	return null
+	var loaded := DataLoader.load_all(false)
+	if not loaded.species.has(id):
+		return null
+	var made := FieldSim.WildAnimal.new()
+	made.species = loaded.species[id]
+	made.position = field.player.position + Vector2(200, 0)
+	made.present = true
+	made.presence_roll = 0.0
+	field.sim.animals.append(made)
+	return made
 
 func _find_companion(field, id: String) -> Actor:
 	for companion in field.companions:

@@ -46,6 +46,8 @@ var _bounds := Rect2()
 var _terrain: TerrainMap = null
 ## 풀 AI 로 승격하는 거리(픽셀). 가장 멀리 닿는 감각보다 넓어야 코가 헛돌지 않는다.
 var _promotion_px := 0.0
+## 이 필드가 속한 지역의 생태
+var region := {}
 
 
 func setup(root: Node2D, actor_scene: PackedScene, schema: TagSchema, tuning: FieldTuning,
@@ -60,13 +62,25 @@ func setup(root: Node2D, actor_scene: PackedScene, schema: TagSchema, tuning: Fi
 	_promotion_px = promotion_px
 
 
-## 대상 종마다 animal_count 마리씩 뿌린다.
-## 자기 habitat 위에서 시작한다 — 숲에 사는 애가 숲에 있어야 지형이 규칙으로 읽힌다.
+## ★ 1단계 — **개체 정의는 필드에 들어갈 때 한 번뿐이다.** (BRIEF §3.11)
+##
+## 종 목록이 아니라 **개체 목록**이다 — 수달 두 마리, 너구리 셋, 고라니 0마리.
+## **개체수 0 은 정상이다.** 어떤 종은 이번 원정에 아예 없다 —
+## 그것이 "조건을 다 맞췄는데 왜 없지"의 정직한 답이고,
+## 확률 파라미터가 아니라 **개체 수 분포**다.
+##
+## 마릿수는 **그 필드에 그 종의 서식지가 얼마나 있는가**에서 나온다.
+## 물가가 거의 없는 필드에 수달이 많으면 그게 이상하다.
+## 화면에서 "오늘은 수달이 많네"로 보이는 값이지 숨은 수치가 아니다.
+##
+## ⚠️ 이 단계는 원정 중에 다시 돌지 않는다. **날씨가 바뀌어도 개체는 늘지도 줄지도 않는다** —
+##    바뀌는 것은 지금 나와 있는가(2단계)뿐이다.
 func spawn(target_species: Array, player_position: Vector2) -> void:
 	# 감지 반경 안에서 시작하면 "첫 유도까지 시간"이 항상 0에 가깝게 나와 지표가 죽는다.
 	var min_distance := _promotion_px
+	var mix := _terrain_mix()
 	for species in target_species:
-		for i in _tuning.animal_count:
+		for i in roster_count(species, mix, region, _tuning.animal_count, _rng):
 			var animal := WildAnimal.new()
 			animal.species = species
 			animal.position = _spawn_point(species, player_position, min_distance)
@@ -77,6 +91,66 @@ func spawn(target_species: Array, player_position: Vector2) -> void:
 			animal.move_scale = _roll_speed(species) * _schema.quirk_product(animal.quirks, "move_scale")
 			animal.velocity *= animal.move_scale
 			animals.append(animal)
+
+
+## 이 필드에서 이 종이 몇 마리인가. 서식지가 넓을수록 많고, 0 도 정상이다.
+## region 은 그 지역의 생태(`regions.json` 의 ecology)다.
+## **같은 종이라도 지역마다 마릿수가 다르다** — 뒷산에 흔한 청설모가 다른 곳에선 드물 수 있다.
+## 지역에 적히지 않은 종은 그 지역에 **살지 않는다** (0 마리).
+static func roster_count(species: Dictionary, terrain_mix: Dictionary, region: Dictionary,
+		base: int, rng: RandomNumberGenerator) -> int:
+	var ecology: Dictionary = region.get("ecology", {})
+	var abundance := 1.0
+	if not ecology.is_empty():
+		if not ecology.has(species.get("id", "")):
+			return 0
+		abundance = float(ecology[species["id"]])
+	var total := 0.0
+	var home := 0.0
+	for name in terrain_mix:
+		var tiles := float(terrain_mix[name])
+		total += tiles
+		if String(name) in species.get("habitat", []):
+			home += tiles
+	var share: float = home / maxf(total, 1.0)
+	# 서식지가 하나도 없어도 아주 없지는 않다 — 지나가는 개체가 있을 수 있다.
+	# 다만 기대값이 1 아래로 떨어지면 **0 마리가 자주 나온다.** 그것이 의도다.
+	# 지역 생태 × 이 필드의 서식지 비율.
+	#
+	# ★ 처음엔 "지나가는 개체"를 위해 하한(0.15)을 뒀는데, 그러면 **물가가 없는
+	#   뒷산에도 수달이 두 마리씩** 나왔다. 서식지가 없으면 기대값도 0 이어야 한다.
+	#   0.6 제곱은 좁은 서식지에도 기회를 조금 남기려는 것이다 —
+	#   개울 한 줄기뿐인 뒷산에서 수달은 **가끔** 보여야지 늘 있으면 안 된다.
+	var expected: float = abundance * float(base) * pow(share, 0.6)
+	var count := int(floor(expected))
+	if rng.randf() < expected - floor(expected):
+		count += 1
+	# 흔들림은 기대값이 1 을 넘을 때만. 0.1 짜리에 +1 을 더하면 없던 개체가 생긴다.
+	if expected >= 1.0:
+		count += rng.randi_range(-1, 1)
+	return maxi(count, 0)
+
+
+func _terrain_mix() -> Dictionary:
+	var mix := {}
+	if _terrain == null:
+		return mix
+	for y in _terrain.size.y:
+		for x in _terrain.size.x:
+			var name := _terrain.at_tile(Vector2i(x, y))
+			mix[name] = int(mix.get(name, 0)) + 1
+	return mix
+
+
+## 이번 원정의 개체 목록. "오늘은 수달이 많네"가 여기서 보인다.
+func roster() -> Dictionary:
+	var out := {}
+	for animal in animals:
+		if animal.invited:
+			continue
+		var name := animal.display_name()
+		out[name] = int(out.get(name, 0)) + 1
+	return out
 
 
 func _spawn_point(species: Dictionary, player_position: Vector2, min_distance: float) -> Vector2:

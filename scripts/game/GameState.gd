@@ -37,6 +37,8 @@ var autosave := true
 var last_device := "key"
 
 var _next_uid := 1
+## 불러오면서 낡은 자료를 고쳤는가. 고쳤으면 파일도 다시 쓴다.
+var _repaired := false
 var _rng := RandomNumberGenerator.new()
 
 
@@ -189,14 +191,22 @@ func load_game() -> bool:
 	#    서로 다른 것으로 보여서, 같은 아이가 동료에 두 번 들어간다 (실제로 그랬다).
 	# 겹친 것도 여기서 걷어낸다 — 이미 저장된 판이 있으므로 고치는 김에 고쳐 준다.
 	# 같은 아이가 둘이면 필드에 **개가 두 마리** 나온다 (사용자 지적).
+	var raw_party: Array = parsed.get("party", [])
 	party = []
-	for uid in parsed.get("party", []):
+	for uid in raw_party:
 		if not (int(uid) in party):
 			party.append(int(uid))
 	while party.size() > PARTY_MAX:
 		party.pop_back()
+	# ⚠️ 고쳤으면 **파일도 고쳐 준다.** 메모리만 고치면 저장을 부르는 일이 없는 판에서는
+	#    파일이 계속 낡은 채로 남는다 — 다음에 열 때마다 같은 것을 또 고치게 된다.
+	if party.size() != raw_party.size():
+		_repaired = true
 	for one in collection:
 		one["uid"] = int(one["uid"])
 	_next_uid = int(parsed.get("next_uid", collection.size() + 1))
 	tutorial_done = bool(parsed.get("tutorial_done", false))
+	if _repaired:
+		_repaired = false
+		save_game()
 	return true

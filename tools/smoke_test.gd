@@ -7,7 +7,7 @@
 extends SceneTree
 
 ## 이 아래로 떨어지면 어딘가에서 판정이 조용히 끊긴 것이다.
-const FLOOR := 422
+const FLOOR := 438
 
 var _pass := 0
 var _fail := 0
@@ -2090,6 +2090,56 @@ func _test_weather(field, game) -> void:
 	blank.autosave = false
 	_check("빈 판을 저장하지 않는다 — 파일은 친구가 생길 때 생긴다", not wrote,
 		"%d" % before_size)
+
+	# ★ 커플 카드 — **거절이 없다** (BRIEF §2.11). 7살에게 두 동물이 친해지는 걸
+	#   거절하게 하는 건 이상하고, 거절이 있으면 "잘못 눌렀다" 가 생긴다(원칙 2).
+	var couple_card: CanvasLayer = load("res://scenes/ui/CoupleCard.tscn").instantiate()
+	field.add_child(couple_card)
+	await process_frame
+	_check("커플 카드는 처음에 꺼져 있다", not couple_card.visible)
+	var otter: Dictionary = DataLoader.load_all(true).species.get("otter", {})
+	var two: Array = [{"species_id": "otter", "sex": "male"},
+		{"species_id": "otter", "sex": "female"}]
+	couple_card.show_for(otter, two, 2, 4, field.schema)
+	var said: Array = []
+	for node in couple_card.get_node("Text").get_children():
+		said.append(String(node.text))
+	var card_line := " ".join(said)
+	_check("무슨 일이 일어났는지 말한다", "가족이 됐어요!" in card_line, card_line)
+	# ⚠️ **거절 버튼을 만들지 않는다.** 버튼은 「잘됐다!」 하나뿐이다.
+	for banned in ["아니", "취소", "안 할", "싫", "거절"]:
+		_check("카드에 '%s' 가 없다" % banned, not (banned in card_line), card_line)
+	_check("축하 한 번뿐이다", "잘됐다!" in card_line, card_line)
+	# ★ 다음에 무슨 일이 생기는지 여기서 말한다 — 안 말하면 "왜 아기가 안 나와" 가 된다
+	_check("자리가 있으면 조용히 기다린다고 한다", "이제 아기를 기다려요" in card_line,
+		card_line)
+	_check("자리를 적는다", "자리  2 / 4" in card_line, card_line)
+	# 두 마리가 **마주 본다** — 오른쪽을 뒤집는다. 도트 0장.
+	var left: Sprite2D = couple_card.get_node("Art").get_node_or_null("Body0")
+	var right: Sprite2D = couple_card.get_node("Art").get_node_or_null("Body1")
+	_check("두 마리가 나온다", left != null and right != null)
+	if left != null and right != null:
+		_check("한 쪽을 뒤집어 마주 보게 한다", right.flip_h and not left.flip_h)
+		_check("같은 그림을 쓴다 — 새 도트가 없다", left.texture == right.texture)
+		_check("정수배로만 키운다", is_equal_approx(left.scale.x, floor(left.scale.x)))
+
+	# 자리가 꽉 차면 **빠져나갈 길**을 같이 적는다 — 막다른 길을 만들지 않는다
+	couple_card.show_for(otter, two, 4, 4, field.schema)
+	var full: Array = []
+	for node in couple_card.get_node("Text").get_children():
+		full.append(String(node.text))
+	var full_line := " ".join(full)
+	_check("꽉 차면 왜 아기가 안 오는지 말한다", "자리가 하나 생기면 아기가 와요" in full_line,
+		full_line)
+	_check("빠져나갈 길을 같이 적는다", "쉼터로 보내면 자리가 나요" in full_line, full_line)
+	# 자리 표시는 **꽉 찼을 때만** 눈에 띈다 — 여유가 있을 때도 강조하면 잔소리가 된다
+	var loud := Color.WHITE
+	for node in couple_card.get_node("Text").get_children():
+		if String(node.text).begins_with("자리"):
+			loud = node.modulate
+	_check("꽉 찼을 때만 자리를 강조한다", loud.b < 0.7, "%s" % loud)
+	couple_card.queue_free()
+	await process_frame
 
 	# ★ 실제 날씨는 튀지 않는다 — 지금과 가까운 상태로만 옮겨간다 (사용자 지적)
 	var walker := WeatherSystem.new()

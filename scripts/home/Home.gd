@@ -21,6 +21,7 @@ const HANGUL_FONT := "res://fonts/Galmuri11.ttf"
 @onready var _hud: Control = $Hud
 @onready var _coin_label: Label = $Hud/Coins
 @onready var _seat_label: Label = $Hud/Seats
+@onready var _couple: CanvasLayer = $CoupleCard
 
 var schema: TagSchema = null
 var tuning: FieldTuning = null
@@ -43,6 +44,9 @@ var _leaving := false
 var _sky := {"cloud": 0.18, "fog": 0.0, "rain": 0.0, "snow": 0.0, "wind": 0.28}
 var _sky_target := 0.18
 var _sky_hold := 0.0
+## 축하를 기다리는 커플들. [{id, mark, at}]
+var _waiting: Array = []
+var _species_by_id := {}
 
 
 func _ready() -> void:
@@ -63,7 +67,8 @@ func _ready() -> void:
 		yard.build(_yard_nodes, screen, view.tile_size)
 		_place_objects()
 	_spawn_residents(result.species, view)
-	_tell_new_pairs(result.species)
+	_species_by_id = result.species
+	_mark_new_couples(result.species)
 	_spawn_player(view)
 	# 집은 맑고 구름이 흐르는 정도만 한다. 비·안개·빛줄기는 없다.
 	_weather_layers.build(["cloud", "sun"])
@@ -118,34 +123,79 @@ func _object_slots(count: int) -> Array:
 	return slots
 
 
-## ★ 짝이 된 것은 **행운**이라 화면이 한 번 말해 준다 — 늘 기다리는 일이 아니므로
-##   놓치면 무슨 일이 있었는지 모른다. 확률을 적지 않고 **일어난 일**만 적는다 (원칙 3).
-## ⚠️ 판을 두르지 않는다. 한 줄이면 충분하다.
-func _tell_new_pairs(species_by_id: Dictionary) -> void:
+## ★ 짝이 된 순간은 **두 단계로** 보여준다. 화면을 막지 않는다 (BRIEF §2.11).
+##   ① 마당에서 두 아이 사이 위에 **하트**가 뜬다 — 판 없이, §3.3 과 같은 규약
+##   ② 아이가 다가가면 카드가 열린다. **안 가도 진행은 된다** —
+##      놓쳐서 손해 보는 것을 만들지 않는다. 다만 못 보면 없는 것과 같으므로
+##      하트는 그 자리에 **머문다**.
+func _mark_new_couples(species_by_id: Dictionary) -> void:
 	if Game.rolled_pairs.is_empty():
 		return
-	var names: Array = []
 	for id in Game.rolled_pairs:
-		names.append(String((species_by_id.get(id, {}) as Dictionary).get("name", id)))
+		var couple: Array = []
+		for resident in residents:
+			if resident.actor.species_id == String(id):
+				couple.append(resident)
+		if couple.size() < 2:
+			continue
+		# 마주 서게 한다 — 오른쪽 아이가 왼쪽을 본다
+		couple[0].actor.position = couple[0].actor.position
+		couple[1].actor.position = couple[0].actor.position + Vector2(26, 0)
+		couple[0].actor.look_direction = Vector2.RIGHT
+		couple[1].actor.look_direction = Vector2.LEFT
+		var heart := Sprite2D.new()
+		heart.texture = SpriteLibrary.pair_ui_texture("paired")
+		heart.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		if heart.texture == null:
+			continue
+		# ⚠️ **판을 두르지 않는다.** 1배 + 1px 그림자 + 꼬리 3px (§3.3 과 같은 규약)
+		var shadow := Sprite2D.new()
+		shadow.texture = heart.texture
+		shadow.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		shadow.modulate = Color(0, 0, 0, 0.5)
+		shadow.position = Vector2(1, 1)
+		var tail := ColorRect.new()
+		tail.color = Color(0.92, 0.36, 0.40)
+		tail.size = Vector2(1, 3)
+		tail.position = Vector2(heart.texture.get_width() * 0.5, heart.texture.get_height())
+		var mark := Node2D.new()
+		mark.add_child(shadow)
+		mark.add_child(heart)
+		mark.add_child(tail)
+		mark.position = (couple[0].actor.position + couple[1].actor.position) * 0.5 \
+			+ Vector2(-heart.texture.get_width() * 0.5, -34)
+		mark.z_index = 5
+		_world.add_child(mark)
+		_waiting.append({"id": String(id), "mark": mark,
+			"at": (couple[0].actor.position + couple[1].actor.position) * 0.5})
 	Game.rolled_pairs = []
-	var line := Label.new()
-	if ResourceLoader.exists(HANGUL_FONT):
-		line.add_theme_font_override("font", load(HANGUL_FONT))
-	line.add_theme_font_size_override("font_size", 11)
-	line.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
-	line.add_theme_constant_override("shadow_offset_x", 1)
-	line.add_theme_constant_override("shadow_offset_y", 1)
-	line.text = "%s 짝이 됐어요!" % Josa.이가(" · ".join(names))
-	line.position = Vector2(0, 62)
-	line.size.x = 640
-	line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	line.modulate = Color(1.0, 0.92, 0.55)
-	_hud.add_child(line)
-	# 잠깐 있다 사라진다 — 지우려고 아이가 무언가를 누를 필요는 없다
-	var fade := create_tween()
-	fade.tween_interval(3.4)
-	fade.tween_property(line, "modulate:a", 0.0, 1.2)
-	fade.tween_callback(line.queue_free)
+
+
+func _celebrating(resident) -> bool:
+	for wait in _waiting:
+		if resident.actor.species_id == String(wait["id"]):
+			return true
+	return false
+
+
+## 다가가면 카드가 열린다. 안 가도 진행은 된 상태다 — 하트만 남아 기다린다.
+func _check_couple_visit() -> void:
+	if _couple.is_open() or _waiting.is_empty():
+		return
+	for i in _waiting.size():
+		var wait: Dictionary = _waiting[i]
+		if player.position.distance_to(Vector2(wait["at"])) > tuning.interact_radius \
+				* tuning.tile_size * 2.0:
+			continue
+		var id := String(wait["id"])
+		var pair: Array = []
+		for one in Game.collection:
+			if String(one["species_id"]) == id:
+				pair.append(one)
+		_couple.show_for(_species_by_id.get(id, {}), pair, residents.size(), seats, schema)
+		(wait["mark"] as Node2D).queue_free()
+		_waiting.remove_at(i)
+		return
 
 
 # --- 동물 ------------------------------------------------------------------
@@ -247,8 +297,14 @@ func _spawn_player(view: FieldTuning) -> void:
 func _process(delta: float) -> void:
 	if _leaving:
 		return
-	player.move_vector = Input.get_vector("move_left", "move_right", "move_up", "move_down")
+	player.move_vector = Vector2.ZERO if _couple.is_open() \
+		else Input.get_vector("move_left", "move_right", "move_up", "move_down")
+	_check_couple_visit()
 	for resident in residents:
+		# ⚠️ 축하를 기다리는 커플은 **붙들어 둔다.** 흩어지면 하트가 아무도 없는 자리에
+		#    남아서, 아이가 가 봐도 왜 하트가 있는지 모른다.
+		if _celebrating(resident):
+			continue
 		resident.update(delta, objects, yard.yard, _rng)
 	_drift_sky(delta)
 	_weather_layers.update(delta, _sky, Rect2(Vector2(-160, -90), Vector2(960, 540)))

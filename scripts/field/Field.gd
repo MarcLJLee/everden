@@ -348,16 +348,34 @@ func lead_goal(companion: Actor, resting: Vector2) -> Vector2:
 ## 곁에서의 어슬렁. 잡은 게 있으면 lead_goal 이 이 값을 덮어쓴다.
 ## ⚠️ 목표를 **가끔만** 바꾼다. 매 프레임 흔들면 걷는 게 아니라 떠는 것으로 보인다.
 func _stroll(companion: Actor, delta: float) -> Vector2:
-	var state: Dictionary = _strolls.get(companion, {"at": Vector2.ZERO, "left": 0.0})
+	var state: Dictionary = _strolls.get(companion,
+		{"at": Vector2.ZERO, "left": 0.0, "was": companion.position, "stuck": 0.0})
 	state["left"] = float(state["left"]) - delta
+	# ⚠️ 어슬렁 목표가 **갈 수 없는 자리**(물·바위)면 동료가 벽을 계속 민다.
+	#    나아가지 못하는 채로 걷고 있으면 목표를 새로 잡는다 — 안 그러면
+	#    영영 걷기만 하고 서지도, 꼬리를 흔들지도 않는다.
+	if companion.move_vector.length() > 0.05 \
+			and companion.position.distance_to(Vector2(state["was"])) < 0.3:
+		state["stuck"] = float(state["stuck"]) + delta
+		if float(state["stuck"]) > 0.4:
+			state["left"] = 0.0
+			state["stuck"] = 0.0
+	else:
+		state["stuck"] = 0.0
+	state["was"] = companion.position
 	if float(state["left"]) <= 0.0:
 		state["left"] = _rng.randf_range(1.4, 3.2)
 		# 반쯤은 제자리에 선다 — 늘 움직이면 그것대로 부산하다
 		if _rng.randf() < 0.45:
 			state["at"] = Vector2.ZERO
 		else:
-			state["at"] = Vector2.from_angle(_rng.randf() * TAU) \
-				* _rng.randf_range(0.4, 1.3) * tuning.tile_size
+			# 갈 수 있는 자리만 고른다 — 못 가는 곳을 고르면 그리로 벽을 민다
+			for attempt in 6:
+				var pick := Vector2.from_angle(_rng.randf() * TAU) \
+					* _rng.randf_range(0.4, 1.3) * tuning.tile_size
+				state["at"] = pick
+				if terrain.can_stand(player.position + pick, schema, companion.habitat):
+					break
 	_strolls[companion] = state
 	return state["at"]
 

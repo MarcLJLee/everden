@@ -7,7 +7,7 @@
 extends SceneTree
 
 ## 이 아래로 떨어지면 어딘가에서 판정이 조용히 끊긴 것이다.
-const FLOOR := 438
+const FLOOR := 442
 
 var _pass := 0
 var _fail := 0
@@ -2140,6 +2140,26 @@ func _test_weather(field, game) -> void:
 	_check("꽉 찼을 때만 자리를 강조한다", loud.b < 0.7, "%s" % loud)
 	couple_card.queue_free()
 	await process_frame
+
+	# ★ **카메라는 발이 아니라 몸 한가운데를 본다** (사용자 지적).
+	#   발을 한가운데 두면 몸이 위를 먹어 머리 위로 보이는 세계가 절반으로 준다 —
+	#   재보니 머리 위 47px · 발 아래 87px 이라 북쪽으로 걸을 때 3타일도 못 봤다.
+	field.player.move_vector = Vector2.ZERO
+	await process_frame
+	await process_frame
+	var eye_view: Rect2 = field.camera_visible_rect()
+	var feet: float = field.player.position.y
+	var head: float = feet - field.player.crown_lift
+	var above := head - eye_view.position.y
+	var below := eye_view.end.y - feet
+	_check("머리 위와 발 아래가 비슷하게 보인다", absf(above - below) < 24.0,
+		"위 %.0fpx · 아래 %.0fpx" % [above, below])
+	_check("머리 위로 네 타일쯤 보인다", above > field.tuning.tile_size * 3.0,
+		"%.1f타일" % (above / field.tuning.tile_size))
+	# ⚠️ 픽셀로 박지 않는다 — 그림 키가 바뀌면 같이 따라와야 한다
+	_check("들어올리는 값은 그림 키에서 나온다",
+		field.tuning.camera_lift_ratio > 0.0 and field.player.crown_lift > 0.0,
+		"비율 %.2f · 키 %.0f" % [field.tuning.camera_lift_ratio, field.player.crown_lift])
 
 	# ★ 실제 날씨는 튀지 않는다 — 지금과 가까운 상태로만 옮겨간다 (사용자 지적)
 	var walker := WeatherSystem.new()

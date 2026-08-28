@@ -175,7 +175,10 @@ func _process(delta: float) -> void:
 	# 겹은 지금 화면이 덮는 월드 사각형 위에 얹는다. 액터 다음이라 캐릭터 위에도 떨어진다.
 	# ⚠️ **카메라를 먼저 옮기고** 재야 한다. 뒤에 옮기면 겹이 한 프레임 늦게 따라와
 	#    빠르게 달릴 때 진행 방향 가장자리가 빈다.
-	_camera.global_position = player.position
+	# ★ 카메라는 **발이 아니라 몸 한가운데**를 본다. 발을 한가운데 두면 몸이 위를 먹어
+	#   머리 위로 보이는 세계가 절반으로 준다 — 북쪽으로 걸을 때 앞이 안 보인다.
+	_camera.global_position = player.position \
+		- Vector2(0, player.crown_lift * tuning.camera_lift_ratio)
 	_weather_layers.update(delta, weather.axes, weather_view_rect(),
 		float(tuning.daypart_daylight.get(daypart, 1.0)),
 		float(tuning.daypart_sun_height.get(daypart, 1.0)))

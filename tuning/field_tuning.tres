@@ -22,6 +22,7 @@ guide_radius = 10.0
 activation_radius = 8.0
 lead_leash = 3.2
 home_seats = 4
+camera_lift_ratio = 0.5
 interact_radius = 1.5
 hold_radius = 2.6
 base_gauge_time = 3.0

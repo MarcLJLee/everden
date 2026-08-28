@@ -16,14 +16,23 @@ const SAVE_PATH := "user://everden.json"
 const VERSION := 1
 ## 원정에 데려갈 수 있는 동료 수. 브리프는 "3마리 내외"(§3.2)고 지금은 둘로 시작한다.
 const PARTY_MAX := 2
-## 원정에서 돌아올 때 짝이 될 확률.
+## 원정에서 돌아올 때 짝이 될 확률. **행운이어야 하므로 낮게** 잡는다 (사용자 지적) —
+## 두세 번 만에 되면 그건 절차지 행운이 아니다.
+##
+## 재보고 고른 값이다. 귀가할 때마다 **되풀이해서 굴리므로** 낮아도 막히지 않는다:
+##   0.35 → 평균 2.9번 (두 번 안에 58%)   ← 너무 흔하다
+##   0.15 → 평균 6.4번
+##   0.10 → 평균 9.6번 (두 번 안에 20%)   ← 이것
+## 문이 닫히지 않는 한(원칙 2) 낮은 값이 오히려 그 순간을 사건으로 만든다.
 ##
 ## ⚠️ **되돌릴 수 없는 실패를 만들지 않는다**(원칙 2). 안 된 날은 "아직" 일 뿐이고
 ##    다음 귀가에 다시 굴린다 — 문이 닫히지 않으므로 기다림이 벌이 되지 않는다.
 ## ⚠️ **숫자를 화면에 내지 않는다**(원칙 3). 아이가 보는 것은 하트가 떴다는 사건뿐이다.
 ## ★ 브리프 §2.4 는 이 대목을 "확률로 풀지 않는다" 로 적어두었다.
 ##   플레이어가 확률 쪽을 골랐으므로 그렇게 두고, 설계 세션에 그 절을 넘겼다.
-const PAIR_CHANCE := 0.35
+const PAIR_CHANCE := 0.10
+## 재보기용 덮어쓰기. 0 이하면 위 상수를 쓴다.
+var PAIR_CHANCE_OVERRIDE := 0.0
 
 ## 모아온 개체들. [{uid, species_id, sex}]
 var collection: Array = []
@@ -132,7 +141,7 @@ func roll_pairs() -> Array:
 			continue
 		if sexes_of(id).size() < 2:
 			continue
-		if _rng.randf() < PAIR_CHANCE:
+		if _rng.randf() < (PAIR_CHANCE_OVERRIDE if PAIR_CHANCE_OVERRIDE > 0.0 else PAIR_CHANCE):
 			made.append(id)
 	for id in made:
 		paired.append(id)

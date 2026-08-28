@@ -2014,7 +2014,7 @@ func _test_weather(field, game) -> void:
 	# ⚠️ **문이 닫히지 않는다**(원칙 2). 안 된 날은 "아직" 일 뿐 다음 귀가에 다시 굴린다.
 	_check("여러 번 돌아오면 언젠가는 된다", yard_state.is_paired("otter"),
 		"귀가 %d 번" % returns)
-	_check("한 번에 되지도, 영영 안 되지도 않는다", returns >= 1 and returns < 60,
+	_check("한 번에 되지도, 영영 안 되지도 않는다", returns >= 1 and returns < 200,
 		"귀가 %d 번" % returns)
 	# ⚠️ **종마다 한 번**이다. 개체를 돌면 암수가 각각 굴려서 확률이 두 배가 된다.
 	var pace := 0
@@ -2030,8 +2030,20 @@ func _test_weather(field, game) -> void:
 			n += 1
 		pace += n
 	var average := float(pace) / 200.0
-	_check("귀가 두세 번쯤이면 된다 — 종마다 한 번만 굴린다",
-		average > 2.2 and average < 3.6, "평균 %.1f 번" % average)
+	# ★ **행운이어야 하므로 낮다.** 두세 번 만에 되면 그건 절차지 행운이 아니다.
+	#   되풀이해서 굴리므로 낮아도 막히지 않는다 (원칙 2).
+	_check("흔하지 않다 — 열 번쯤 다녀와야 한 번", average > 6.0 and average < 15.0,
+		"평균 %.1f 번" % average)
+	# ⚠️ 종마다 한 번이다. 개체를 돌면 암수가 각각 굴려 확률이 두 배가 된다.
+	var per_species := GameState.new()
+	per_species.autosave = false
+	per_species.start_new()
+	per_species.PAIR_CHANCE_OVERRIDE = 1.0
+	per_species.add("otter", "male")
+	per_species.add("otter", "female")
+	per_species.add("cat", "male")
+	_check("한 번 굴리면 짝이 될 종만 된다", per_species.roll_pairs() == ["otter"],
+		"%s" % [per_species.roll_pairs()])
 	# 혼자면 아무리 돌아와도 안 된다 — 그건 지도 핀이 풀 몫이다
 	var lone := GameState.new()
 	lone.autosave = false

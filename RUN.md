@@ -5,20 +5,31 @@ Godot 4.7 (`brew install --cask godot`) 기준. 프로젝트 루트가 이 폴�
 ## 실행
 
 ```bash
-/Applications/Godot.app/Contents/MacOS/Godot --path . 
+/Applications/Godot.app/Contents/MacOS/Godot --path .
 ```
 
-에디터로 열려면 위 명령에 `--editor`, 바로 플레이하려면 그대로 두면 된다.
+| | |
+|---|---|
+| 에디터로 열기 | 위 명령에 `--editor` |
+| 눈 오는 걸로 시작 | 위 명령에 `-- --snow` |
+| 회귀 | `--headless --script tools/smoke_test.gd` |
+| 데이터 검증 | `--headless --script tools/validate_data.gd` |
 
 ```
 제작사 로고 (RUN II) — 발자국이 하나씩 찍히고 이름이 뜬다. 아무 키나 누르면 건너뜀
     ↓
 타이틀 (EVERDEN) — 켤 때마다 배경 지형과 동무가 바뀐다
     ↓
-NEW GAME → **집** / SETTING → 설정 / EXIT → 확인 창
+CONTINUE(세이브가 있을 때만) / NEW GAME / SETTING / EXIT
     ↓
-집 — 대문으로 걸어 나가면 필드
+NEW GAME → **첫 만남**(강아지를 초대한다) → 집
+CONTINUE → 첫 만남을 안 지났으면 거기서, 지났으면 집
+    ↓
+집 ─ 대문 ─▶ 세계 지도(어디로) ─▶ 팀 편성(누구랑) ─▶ 필드 ─ Enter ─▶ 집
 ```
+
+**세이브**는 `~/Library/Application Support/Godot/app_userdata/EVERDEN/everden.json` 이다.
+지우면 타이틀에서 CONTINUE 가 사라지고 처음부터 시작한다.
 
 `Title.gd` 의 `demo_build` 를 켜면 첫 항목이 `DEMO` 가 되고 집을 건너뛰고 필드로 간다.
 

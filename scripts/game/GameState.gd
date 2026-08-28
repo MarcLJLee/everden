@@ -92,7 +92,9 @@ func start_new() -> void:
 	tutorial_done = false
 	paired.clear()
 	region_id = "home_hills"
-	save_game()
+	# ⚠️ **여기서 저장하지 않는다.** 세이브를 지우고 켜면 오토로드가 곧바로 빈 파일을
+	#    새로 써서, 타이틀이 그걸 보고 CONTINUE 를 띄웠다 (사용자 지적).
+	#    파일은 **처음 친구가 생길 때** 생긴다 — 그 전에는 이어할 것이 없다.
 
 
 ## 첫 만남이 끝났다 — 강아지가 식구가 되고, 그대로 첫 동료가 된다.

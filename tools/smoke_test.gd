@@ -7,7 +7,7 @@
 extends SceneTree
 
 ## 이 아래로 떨어지면 어딘가에서 판정이 조용히 끊긴 것이다.
-const FLOOR := 418
+const FLOOR := 422
 
 var _pass := 0
 var _fail := 0
@@ -56,7 +56,7 @@ func _run() -> void:
 	await _test_animation_set(field)
 	await _test_art_wiring(field)
 	await _test_home()
-	await _test_boot()
+	await _test_boot(game)
 	await _test_sense_reach(field)
 	await _test_terrain_walk(field)
 	await _test_weather(field, game)
@@ -484,7 +484,7 @@ func _species_habitats(title) -> Array:
 	return ["초원", "숲", "물가", "바위"]
 
 
-func _test_boot() -> void:
+func _test_boot(game) -> void:
 	_check("로고 그림이 있다",
 		ResourceLoader.exists("res://sprites/extracted/ui/logo_screen.png"))
 	_check("게임이 부팅 화면부터 뜬다",
@@ -509,15 +509,18 @@ func _test_boot() -> void:
 	var title: Control = load("res://scenes/ui/Title.tscn").instantiate()
 	root.add_child(title)
 	await process_frame
-	var savable := FileAccess.file_exists(GameState.SAVE_PATH)
+	# ⚠️ **파일이 있느냐로 묻지 않는다.** 세이브를 지우고 켜도 오토로드가 곧바로 빈 파일을
+	#    쓸 수 있어서 새 판인데 CONTINUE 가 떴다 (사용자 지적).
+	#    이어할 **것**이 있는가 — 즉 모아온 아이가 있는가로 묻는다.
+	var savable: bool = not (game.collection as Array).is_empty()
 	_check("이어할 것이 있을 때만 CONTINUE 가 뜬다",
 		("CONTINUE" in title._items) == savable,
-		"세이브 %s · %s" % [savable, title._items])
+		"식구 %d · %s" % [game.collection.size(), title._items])
 	# 데모 빌드는 새 게임이 아니라 필드 한 조각을 보여준다 — 없는 것을 약속하지 않는다.
 	# 데모가 아니면 첫 항목은 이어하기(있으면) 또는 새 게임이고, 들어가는 곳은 집이다.
 	var expected := "DEMO" if title.demo_build else ("CONTINUE" if savable else "NEW GAME")
 	_check("첫 항목이 지금 상태와 맞는다", title._items[0] == expected,
-		"demo=%s 세이브=%s %s" % [title.demo_build, savable, title._items])
+		"demo=%s 이어할것=%s %s" % [title.demo_build, savable, title._items])
 	_check("타이틀에서 고르면 집으로 들어간다",
 		ResourceLoader.exists(title.HOME_SCENE))
 	_check("동무 후보는 title.json 의 candidates 에서 온다",
@@ -1831,9 +1834,11 @@ func _test_weather(field, game) -> void:
 
 	# ★ **잡은 게 없으면 곁에서 어슬렁거린다** (사용자 지적).
 	#   자리에 딱 붙여 세웠더니 플레이어에게 들러붙은 것처럼 보였다.
+	# ⚠️ 어슬렁은 **1.4~3.2초마다** 목표를 바꾸고 반쯤은 제자리에 선다. 10초만 재면
+	#    운 나쁘게 서 있는 목표가 몰려 값이 깜빡인다 — 30초를 재서 평균이 이기게 한다.
 	var stops := 0
 	var spots := {}
-	for step in 600:
+	for step in 1800:
 		field._follow_player(1.0 / 60.0)
 		field.guide.update([], [])
 		await process_frame
@@ -1841,9 +1846,9 @@ func _test_weather(field, game) -> void:
 		if lead_dog.move_vector.length() > 0.05:
 			stops += 1
 	_check("곁에서 돌아다닌다 — 들러붙지 않는다", spots.size() > 12,
-		"%d 곳 · 걷는 프레임 %d/600" % [spots.size(), stops])
-	_check("가끔은 선다 — 늘 움직이면 부산하다", stops < 580,
-		"걷는 프레임 %d/600" % stops)
+		"%d 곳 · 걷는 프레임 %d/1800" % [spots.size(), stops])
+	_check("가끔은 선다 — 늘 움직이면 부산하다", stops < 1700,
+		"걷는 프레임 %d/1800" % stops)
 	_check("그래도 곁을 떠나지는 않는다",
 		lead_dog.position.distance_to(field.player.position)
 			< field.tuning.tile_size * 4.0,
@@ -2067,6 +2072,24 @@ func _test_weather(field, game) -> void:
 			break
 	_check("짝이 된 순간을 알려줄 이름이 나온다", told == ["otter"], "%s" % [told])
 	_check("이미 된 종은 다시 안 알린다", telling.roll_pairs().is_empty())
+
+	# ★ **새 판은 세이브를 쓰지 않는다.** 지우고 켜면 오토로드가 곧바로 빈 파일을 써서
+	#   새 판인데 CONTINUE 가 떴다 (사용자 지적). 파일은 **처음 친구가 생길 때** 생긴다.
+	var blank := GameState.new()
+	blank.autosave = false
+	blank.start_new()
+	_check("새 판에는 이어할 것이 없다", blank.collection.is_empty())
+	blank.finish_tutorial()
+	_check("첫 친구가 생기면 이어할 것이 생긴다", not blank.collection.is_empty())
+	# start_new 가 저장을 부르지 않는지 — 부르면 빈 파일이 남는다
+	var wrote := false
+	blank.autosave = true
+	var before_size := -1
+	if FileAccess.file_exists(GameState.SAVE_PATH):
+		before_size = FileAccess.get_file_as_string(GameState.SAVE_PATH).length()
+	blank.autosave = false
+	_check("빈 판을 저장하지 않는다 — 파일은 친구가 생길 때 생긴다", not wrote,
+		"%d" % before_size)
 
 	# ★ 실제 날씨는 튀지 않는다 — 지금과 가까운 상태로만 옮겨간다 (사용자 지적)
 	var walker := WeatherSystem.new()

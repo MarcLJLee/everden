@@ -372,9 +372,18 @@ func _activate(item: String) -> void:
 			_wake()
 
 
-## 이어할 것이 있는가. **파일이 있으면 있다** — 첫 만남 도중에 껐어도 거기서 잇는다.
+## 이어할 것이 있는가.
+##
+## ⚠️ **파일이 있느냐로 묻지 않는다.** 세이브를 지우고 켜도 오토로드가 곧바로 빈 파일을
+##    쓸 수 있어서, 새 판인데 CONTINUE 가 떴다 (사용자 지적).
+##    묻는 것은 "이어할 **것**이 있는가" — 즉 **모아온 아이가 있는가** 다.
 ## ⚠️ 오토로드를 이름으로 쓰지 않는다: 타이틀이 먼저 뜰 수 있다.
 func _has_save() -> bool:
+	var loop := Engine.get_main_loop()
+	if loop is SceneTree:
+		var game := (loop as SceneTree).root.get_node_or_null("Game")
+		if game != null:
+			return not (game.collection as Array).is_empty()
 	return FileAccess.file_exists(GameState.SAVE_PATH)
 
 

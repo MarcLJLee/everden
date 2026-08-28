@@ -16,6 +16,14 @@ const SAVE_PATH := "user://everden.json"
 const VERSION := 1
 ## 원정에 데려갈 수 있는 동료 수. 브리프는 "3마리 내외"(§3.2)고 지금은 둘로 시작한다.
 const PARTY_MAX := 2
+## 원정에서 돌아올 때 짝이 될 확률.
+##
+## ⚠️ **되돌릴 수 없는 실패를 만들지 않는다**(원칙 2). 안 된 날은 "아직" 일 뿐이고
+##    다음 귀가에 다시 굴린다 — 문이 닫히지 않으므로 기다림이 벌이 되지 않는다.
+## ⚠️ **숫자를 화면에 내지 않는다**(원칙 3). 아이가 보는 것은 하트가 떴다는 사건뿐이다.
+## ★ 브리프 §2.4 는 이 대목을 "확률로 풀지 않는다" 로 적어두었다.
+##   플레이어가 확률 쪽을 골랐으므로 그렇게 두고, 설계 세션에 그 절을 넘겼다.
+const PAIR_CHANCE := 0.35
 
 ## 모아온 개체들. [{uid, species_id, sex}]
 var collection: Array = []
@@ -27,6 +35,11 @@ var region_id := "home_hills"
 var party: Array = []
 ## 첫 만남을 지났는가. 새 판은 **아무도 없이** 시작하고 강아지 하나를 초대하며 시작한다.
 var tutorial_done := false
+## 짝이 된 종들. 암수를 다 데려왔다고 바로 되는 게 아니다 (사용자 지적) —
+## 원정에서 돌아올 때마다 한 번씩 굴린다.
+var paired: Array = []
+## 이번 귀가에 새로 짝이 된 종들. 집이 한 번 보여주고 비운다.
+var rolled_pairs: Array = []
 
 ## 회귀가 진짜 저장 파일을 건드리면 안 된다 — 사람이 모아온 아이들이 거기 있다.
 var autosave := true
@@ -68,6 +81,7 @@ func start_new() -> void:
 	party.clear()
 	_next_uid = 1
 	tutorial_done = false
+	paired.clear()
 	region_id = "home_hills"
 	save_game()
 
@@ -95,6 +109,36 @@ func add(species_id: String, sex := "") -> Dictionary:
 	note_seen(species_id)
 	save_game()
 	return one
+
+
+## 이 종이 짝을 이뤘는가.
+func is_paired(species_id: String) -> bool:
+	return species_id in paired
+
+
+## 원정에서 돌아왔다. 암수가 다 있는 종마다 한 번씩 굴린다.
+## 새로 짝이 된 종 이름들을 돌려준다 — 화면이 그 사건을 보여줘야 하기 때문이다.
+func roll_pairs() -> Array:
+	# ⚠️ **종마다 한 번**이다. 개체를 돌면 암수 두 마리가 각각 굴려서 확률이 두 배가 된다
+	#    — 재보니 0.35 가 0.58 로 뛰었다.
+	var kinds: Array = []
+	for one in collection:
+		var id := String(one["species_id"])
+		if not (id in kinds):
+			kinds.append(id)
+	var made: Array = []
+	for id in kinds:
+		if id in paired:
+			continue
+		if sexes_of(id).size() < 2:
+			continue
+		if _rng.randf() < PAIR_CHANCE:
+			made.append(id)
+	for id in made:
+		paired.append(id)
+	if not made.is_empty():
+		save_game()
+	return made
 
 
 func note_seen(species_id: String) -> void:
@@ -174,7 +218,7 @@ func save_game() -> void:
 	file.store_string(JSON.stringify({
 		"version": VERSION, "next_uid": _next_uid, "collection": collection,
 		"seen": seen, "region_id": region_id, "party": party,
-		"tutorial_done": tutorial_done,
+		"tutorial_done": tutorial_done, "paired": paired,
 	}, "  "))
 
 
@@ -206,6 +250,7 @@ func load_game() -> bool:
 		one["uid"] = int(one["uid"])
 	_next_uid = int(parsed.get("next_uid", collection.size() + 1))
 	tutorial_done = bool(parsed.get("tutorial_done", false))
+	paired = parsed.get("paired", [])
 	if _repaired:
 		_repaired = false
 		save_game()

@@ -63,6 +63,7 @@ func _ready() -> void:
 		yard.build(_yard_nodes, screen, view.tile_size)
 		_place_objects()
 	_spawn_residents(result.species, view)
+	_tell_new_pairs(result.species)
 	_spawn_player(view)
 	# 집은 맑고 구름이 흐르는 정도만 한다. 비·안개·빛줄기는 없다.
 	_weather_layers.build(["cloud", "sun"])
@@ -117,6 +118,36 @@ func _object_slots(count: int) -> Array:
 	return slots
 
 
+## ★ 짝이 된 것은 **행운**이라 화면이 한 번 말해 준다 — 늘 기다리는 일이 아니므로
+##   놓치면 무슨 일이 있었는지 모른다. 확률을 적지 않고 **일어난 일**만 적는다 (원칙 3).
+## ⚠️ 판을 두르지 않는다. 한 줄이면 충분하다.
+func _tell_new_pairs(species_by_id: Dictionary) -> void:
+	if Game.rolled_pairs.is_empty():
+		return
+	var names: Array = []
+	for id in Game.rolled_pairs:
+		names.append(String((species_by_id.get(id, {}) as Dictionary).get("name", id)))
+	Game.rolled_pairs = []
+	var line := Label.new()
+	if ResourceLoader.exists(HANGUL_FONT):
+		line.add_theme_font_override("font", load(HANGUL_FONT))
+	line.add_theme_font_size_override("font_size", 11)
+	line.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
+	line.add_theme_constant_override("shadow_offset_x", 1)
+	line.add_theme_constant_override("shadow_offset_y", 1)
+	line.text = "%s 짝이 됐어요!" % Josa.이가(" · ".join(names))
+	line.position = Vector2(0, 62)
+	line.size.x = 640
+	line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	line.modulate = Color(1.0, 0.92, 0.55)
+	_hud.add_child(line)
+	# 잠깐 있다 사라진다 — 지우려고 아이가 무언가를 누를 필요는 없다
+	var fade := create_tween()
+	fade.tween_interval(3.4)
+	fade.tween_property(line, "modulate:a", 0.0, 1.2)
+	fade.tween_callback(line.queue_free)
+
+
 # --- 동물 ------------------------------------------------------------------
 
 ## ★ 마당에 있는 것은 **모아온 아이들**이지 데이터에 있는 종이 아니다.
@@ -144,22 +175,23 @@ func _spawn_residents(species_by_id: Dictionary, view: FieldTuning) -> void:
 	_show_pair_marks()
 
 
-## ★ **규칙을 짊어지는 것은 ♂♀ 가 아니라 하트다** (BRIEF §4.9 · 원칙 3).
-##   7살은 기호를 읽어서 아기가 왜 안 생기는지 아는 게 아니라,
-##   **반쪽 하트**를 보고 "얘는 혼자예요" 를 안다. ♂♀ 는 그 다음에 붙는 이름표다.
+## ★ **하트는 짝이 완성됐을 때만 뜬다** (사용자 지적).
+##
+##   브리프 §2.4 는 반쪽 하트를 "짝이 없다는 걸 먼저 알게 하는 장치" 로 뒀지만,
+##   초반에는 **모든 아이가 혼자**라 마당 전체에 반쪽 하트가 깔린다. 그러면 안내가
+##   아니라 **할 일 목록**이 되고, 그건 "집은 보는 곳이지 해야 하는 곳이 아니다"(§2.7)와
+##   "수집이 벌이 되면 안 된다"(원칙 6)에 걸린다.
+##
+##   그래서 하트는 **잔소리가 아니라 상**이다 — 짝이 맞으면 뜨고, 혼자면 아무것도 없다.
+##   "어디 가면 있는지" 는 세계 지도의 하트 핀이 이미 말하고 있으므로
+##   §2.4 의 막힘 방지 장치는 그대로 산다.
 ## ⚠️ 텍스처는 Sprite2D 로 얹는다 — Control 의 `_draw` 로 그리면 네모가 된다 (RUN.md).
 func _show_pair_marks() -> void:
-	var by_species := {}
 	for resident in residents:
-		var id: String = resident.actor.species_id
-		if not by_species.has(id):
-			by_species[id] = {}
-		by_species[id][resident.actor.sex] = true
-	for resident in residents:
-		var kinds: Dictionary = by_species[resident.actor.species_id]
-		var paired: bool = kinds.size() >= 2
+		# ⚠️ 암수가 다 있다고 바로 짝이 아니다 — 원정에서 돌아올 때 굴린다 (사용자 지적).
+		var paired: bool = Game.is_paired(resident.actor.species_id)
 		var heart := Sprite2D.new()
-		heart.texture = SpriteLibrary.pair_ui_texture("paired" if paired else "alone")
+		heart.texture = SpriteLibrary.pair_ui_texture("paired") if paired else null
 		heart.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		# ⚠️ 캔버스 높이만큼 올리면 **그림에서 한참 떠서 누구 것인지 안 보인다** —
 		#    캔버스 바닥은 그림의 접지선이 아니다. 그림 윗변(canvas_offset.y)에 붙인다.
@@ -171,7 +203,8 @@ func _show_pair_marks() -> void:
 		badge.texture = SpriteLibrary.pair_ui_texture(resident.actor.sex)
 		badge.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		if badge.texture != null:
-			badge.position = above + Vector2(4, 1)
+			# 하트가 없으면 뱃지가 가운데로 온다 — 한쪽으로 치우친 표시는 붙다 만 것으로 보인다
+			badge.position = above + (Vector2(4, 1) if paired else Vector2(-2, 1))
 			resident.actor.add_child(badge)
 
 

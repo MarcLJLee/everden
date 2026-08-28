@@ -7,7 +7,7 @@
 extends SceneTree
 
 ## 이 아래로 떨어지면 어딘가에서 판정이 조용히 끊긴 것이다.
-const FLOOR := 404
+const FLOOR := 418
 
 var _pass := 0
 var _fail := 0
@@ -1976,6 +1976,85 @@ func _test_weather(field, game) -> void:
 				if a.get_pixel(x, y) != b.get_pixel(x, y):
 					high += 1
 		_check("%s 는 다리만 움직인다" % pose, high == 0, "위쪽이 %d 픽셀 달라졌다" % high)
+
+	# ★ **하트는 짝이 완성됐을 때만 뜬다** (사용자 지적).
+	#   초반에는 모든 아이가 혼자라 마당 전체에 반쪽 하트가 깔린다 — 그러면 안내가
+	#   아니라 할 일 목록이 되고, 그건 원칙 6("수집이 벌이 되면 안 된다")에 걸린다.
+	var yard_state := GameState.new()
+	yard_state.autosave = false
+	yard_state.start_new()
+	yard_state.add("squirrel", "male")
+	yard_state.add("otter", "male")
+	yard_state.add("otter", "female")
+	var paired_kinds := 0
+	var lonely_kinds := 0
+	for id in ["squirrel", "otter"]:
+		if yard_state.sexes_of(id).size() >= 2:
+			paired_kinds += 1
+		else:
+			lonely_kinds += 1
+	_check("짝이 맞은 종과 혼자인 종을 가려낸다",
+		paired_kinds == 1 and lonely_kinds == 1,
+		"짝 %d · 혼자 %d" % [paired_kinds, lonely_kinds])
+	# 혼자여도 **찾아갈 곳은 지도가 말한다** — 막힘 방지 장치는 그대로 산다
+	_check("혼자인 종은 지도가 찾아 준다",
+		String(yard_state.lonely_species().get("squirrel", "")) == "female",
+		"%s" % [yard_state.lonely_species()])
+	_check("짝이 맞은 종은 지도에 안 뜬다", not yard_state.lonely_species().has("otter"))
+	_check("혼자 표시 그림이 있긴 하다 — 나중에 쓸 자리",
+		SpriteLibrary.pair_ui_texture("alone") != null)
+
+	# ★ **암수를 다 데려왔다고 바로 짝이 아니다** (사용자 지적). 원정에서 돌아올 때
+	#   종마다 한 번씩 굴린다. 짝이 되어 아기가 생기는 것은 일종의 행운이다.
+	_check("암수가 다 있어도 처음엔 짝이 아니다", not yard_state.is_paired("otter"))
+	var returns := 0
+	while not yard_state.is_paired("otter") and returns < 300:
+		yard_state.roll_pairs()
+		returns += 1
+	# ⚠️ **문이 닫히지 않는다**(원칙 2). 안 된 날은 "아직" 일 뿐 다음 귀가에 다시 굴린다.
+	_check("여러 번 돌아오면 언젠가는 된다", yard_state.is_paired("otter"),
+		"귀가 %d 번" % returns)
+	_check("한 번에 되지도, 영영 안 되지도 않는다", returns >= 1 and returns < 60,
+		"귀가 %d 번" % returns)
+	# ⚠️ **종마다 한 번**이다. 개체를 돌면 암수가 각각 굴려서 확률이 두 배가 된다.
+	var pace := 0
+	for run in 200:
+		var trial := GameState.new()
+		trial.autosave = false
+		trial.start_new()
+		trial.add("otter", "male")
+		trial.add("otter", "female")
+		var n := 0
+		while not trial.is_paired("otter") and n < 200:
+			trial.roll_pairs()
+			n += 1
+		pace += n
+	var average := float(pace) / 200.0
+	_check("귀가 두세 번쯤이면 된다 — 종마다 한 번만 굴린다",
+		average > 2.2 and average < 3.6, "평균 %.1f 번" % average)
+	# 혼자면 아무리 돌아와도 안 된다 — 그건 지도 핀이 풀 몫이다
+	var lone := GameState.new()
+	lone.autosave = false
+	lone.start_new()
+	lone.add("otter", "male")
+	for i in 40:
+		lone.roll_pairs()
+	_check("혼자면 짝이 안 된다 — 그건 지도가 풀 몫이다", not lone.is_paired("otter"))
+	_check("대신 지도가 어느 성별을 찾을지 말한다",
+		String(lone.lonely_species().get("otter", "")) == "female")
+	# 새로 짝이 된 종은 화면이 한 번 말해 준다 — 확률이 아니라 **일어난 일**을 적는다
+	var telling := GameState.new()
+	telling.autosave = false
+	telling.start_new()
+	telling.add("otter", "male")
+	telling.add("otter", "female")
+	var told: Array = []
+	for i in 60:
+		told = telling.roll_pairs()
+		if not told.is_empty():
+			break
+	_check("짝이 된 순간을 알려줄 이름이 나온다", told == ["otter"], "%s" % [told])
+	_check("이미 된 종은 다시 안 알린다", telling.roll_pairs().is_empty())
 
 	# ★ 실제 날씨는 튀지 않는다 — 지금과 가까운 상태로만 옮겨간다 (사용자 지적)
 	var walker := WeatherSystem.new()

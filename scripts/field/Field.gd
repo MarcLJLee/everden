@@ -132,6 +132,8 @@ func _ready() -> void:
 	# 늘 보이는 것은 **지명과 자리 둘뿐**이다 (BRIEF §3.4).
 	_hud.refresh(String(region.get("name", "")), Game.collection.size(), tuning.home_seats)
 	_go_home.go_home.connect(func() -> void:
+		# ★ 짝은 **돌아올 때** 정해진다. 데려오자마자 바로 되는 게 아니다 (사용자 지적).
+		Game.rolled_pairs = Game.roll_pairs()
 		get_tree().call_deferred("change_scene_to_file", "res://scenes/home/Home.tscn"))
 	_weather_layers.build()
 	# `godot --path . -- --snow` 로 켜면 눈부터 시작한다. 계절이 없는 동안 눈을 보려는 용도다.

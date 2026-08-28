@@ -184,6 +184,12 @@ func _process(delta: float) -> void:
 			position = position.clamp(bounds.position, bounds.end)
 		_apply_facing(_facing_from(move_vector))
 		_walk_phase += delta * _tuning.walk_cycle_hz
+	elif facing_set == "four":
+		# ★ 4방향 몸은 **멈춰도 보던 쪽을 그대로 본다** (사용자 지적).
+		#   남쪽으로 걸어오다 서면 정면이 그대로 남는다 — 그림이 있는데 굳이 돌릴 이유가 없다.
+		#   좌우 2방향 규칙은 **측면 1방향인 몸**에만 있는 것이다.
+		if look_direction.length() > 0.05:
+			_apply_facing(_facing_from(look_direction))
 	elif absf(look_direction.x) > 0.05:
 		# 대기 스프라이트는 좌우 2방향뿐이다 (BRIEF §4.5).
 		# 정지 상태에서 북/남을 바라보게 두면 측면 몸통에 정면 눈이 얹힌다.
@@ -211,6 +217,20 @@ func _apply_facing(new_facing: String) -> void:
 	_body.apply_facing(facing)
 
 
+## 서 있을 때 쓸 그림. 4방향 몸은 **보던 쪽 그림으로 선다.**
+##
+## ⚠️ `idle` 한 장만 쓰면 남쪽을 보고 서 있어도 옆모습이 나온다 — 정면 그림이 있는데도.
+##    전용 `idle_남/북` 이 있으면 그것을, 없으면 걷기 시트의 **첫 칸**을 선 자세로 쓴다.
+func _resting_pose() -> String:
+	if facing_set != "four":
+		return "idle"
+	var frames := _body_sprite.sprite_frames
+	for name in ["idle_%s" % facing, "move_%s" % facing]:
+		if facing in ["north", "south"] and frames.has_animation(name):
+			return name
+	return "idle"
+
+
 ## 걷기 프레임과 바운스를 같은 위상에서 뽑는다 — 둘이 어긋나면 발이 땅에서 뜬다.
 func _update_body_frame() -> void:
 	var step := int(_walk_phase) % 2
@@ -224,7 +244,7 @@ func _update_body_frame() -> void:
 		_body.position.y = float(-_tuning.bounce_height_px * step)
 	else:
 		var special := play_special and _body_sprite.sprite_frames.has_animation("special")
-		_body_sprite.animation = "special" if special else "idle"
+		_body_sprite.animation = "special" if special else _resting_pose()
 		_body_sprite.frame = int(_walk_phase) % 2 if special else 0
 		if special:
 			_walk_phase += 0.08   # 대기 중에도 특징 동작은 움직여야 한다

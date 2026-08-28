@@ -7,7 +7,7 @@
 extends SceneTree
 
 ## 이 아래로 떨어지면 어딘가에서 판정이 조용히 끊긴 것이다.
-const FLOOR := 388
+const FLOOR := 404
 
 var _pass := 0
 var _fail := 0
@@ -95,6 +95,10 @@ func _test_facing_and_bounce(field) -> void:
 	_check("북향에서 눈·입이 숨는다", not eye.visible and not body.get_node("Mouth").visible)
 
 	player.move_vector = Vector2.RIGHT
+	await process_frame
+	# ⚠️ 기준은 **같은 방향으로 걷기 시작한 뒤**에 잡는다. 방향이 바뀌면 앵커도 바뀌는 게
+	#    맞으므로(정면 눈과 옆 눈은 자리가 다르다), 방향이 섞인 값과 견주면 헛돈다.
+	eye_offset_before = eye.position
 	var seen := {}
 	var non_integer := false
 	for i in 40:
@@ -104,8 +108,11 @@ func _test_facing_and_bounce(field) -> void:
 			non_integer = true
 	_check("바운스가 Body 노드 Y로 일어난다", seen.size() >= 2, "관측된 Y: %s" % [seen.keys()])
 	_check("Body.position.y 가 정수 픽셀", not non_integer, "관측된 Y: %s" % [seen.keys()])
+	# ⚠️ 걷는 동안 **프레임이 바뀌어도** 얼굴 앵커와 몸통 자리는 그대로여야 한다.
+	#    (방향이 바뀌면 앵커도 바뀌는 게 맞다 — 그건 아래에서 따로 본다)
 	_check("스프라이트는 제자리 — 얼굴 앵커가 프레임마다 흔들리지 않는다",
-		eye.position == eye_offset_before and body_sprite.position == player.canvas_offset)
+		eye.position == eye_offset_before and body_sprite.position == player.canvas_offset,
+		"눈 %s→%s" % [eye_offset_before, eye.position])
 
 	# 접지선이 캔버스 맨 아래가 아닌 그림이 있다 — 그대로 놓으면 그림자 위에 뜬다
 	var ground: Dictionary = SpriteLibrary.ground_info(
@@ -122,17 +129,39 @@ func _test_facing_and_bounce(field) -> void:
 	await process_frame
 	_check("정지하면 바운스가 0으로 돌아온다", body.position.y == 0.0)
 
-	# 대기는 좌우 2방향뿐 — 정지 중에 북/남을 보면 측면 몸통에 정면 눈이 얹힌다 (BRIEF §4.5)
+	# ★ **4방향 몸은 멈춰도 보던 쪽을 그대로 본다** (사용자 지적).
+	#   남쪽으로 걸어오다 서면 정면이 그대로 남는다 — 그림이 있는데 굳이 돌릴 이유가 없다.
 	player.look_direction = Vector2.UP
 	await process_frame
-	_check("정지 중 위를 봐도 방향은 좌우로 유지된다",
-		player.facing == "east" or player.facing == "west", player.facing)
-	_check("정지 중에는 얼굴이 사라지지 않는다", eye.visible)
+	_check("4방향 몸은 멈춰도 북향을 지킨다", player.facing == "north", player.facing)
+	_check("북향에서는 얼굴이 숨는다", not eye.visible)
+	player.look_direction = Vector2.DOWN
+	await process_frame
+	_check("남쪽을 보고 서면 정면이 남는다", player.facing == "south", player.facing)
+	_check("정면에서는 얼굴이 보인다", eye.visible)
+	_check("서 있어도 그쪽 그림을 쓴다",
+		String(body_sprite.animation) in ["move_south", "idle_south"],
+		String(body_sprite.animation))
 	player.look_direction = Vector2(-1, -3)
 	await process_frame
-	_check("정지 중 왼쪽 위를 보면 서향이 된다", player.facing == "west", player.facing)
+	_check("왼쪽 위를 보면 북향이다", player.facing == "north", player.facing)
 	player.look_direction = Vector2.ZERO
 	await process_frame
+
+	# 측면 1방향인 몸은 예전 규칙 그대로 — 정지 중에 북/남을 보면 측면 몸통에 정면 눈이 얹힌다
+	# ⚠️ 개체를 못 찾으면 판정을 **건너뛰지 않는다.** 건너뛰면 통과 수가 판마다 달라져서
+	#    "조용히 사라짐" 과 구분이 안 된다 — 못 찾은 것 자체를 실패로 적는다.
+	var sider: Actor = _promoted(field, "squirrel")
+	_check("측면 1방향 몸을 하나 잡았다", sider != null)
+	if sider != null:
+		sider.move_vector = Vector2.ZERO
+		sider.look_direction = Vector2.UP
+		await process_frame
+		_check("측면 1방향 몸은 정지 중 좌우로 유지된다",
+			sider.facing in ["east", "west"], sider.facing)
+		sider.look_direction = Vector2.ZERO
+	else:
+		_check("측면 1방향 몸은 정지 중 좌우로 유지된다", false, "개체를 못 찾았다")
 
 	# 눈은 공용이 원칙이고, 어느 쪽을 볼지는 데이터의 eye_style 이 정한다.
 	# 폴더가 있느냐로 정하면 종 폴더가 다시 생성되는 순간 조용히 그쪽으로 끌려간다.
@@ -1694,6 +1723,15 @@ func _test_weather(field, game) -> void:
 	lead_dog.position = field.player.position
 	lead_cat.position = field.player.position
 	var leash: float = field.tuning.lead_leash * field.tuning.tile_size
+	# ⚠️ 대상을 **동료가 갈 수 있는 쪽**에 둔다. 물이나 바위 쪽이면 도중에 멈춰서
+	#    유도가 되는데도 "안 간다" 로 읽힌다.
+	var dog_way := Vector2(60, 0)
+	for turn in 8:
+		var probe := Vector2.RIGHT.rotated(TAU * float(turn) / 8.0) * 60.0
+		if field.terrain.can_stand(field.player.position + probe, field.schema,
+				lead_dog.habitat):
+			dog_way = probe
+			break
 	var ahead := 0.0
 	var toward := 0.0
 	for step in 240:
@@ -1703,10 +1741,12 @@ func _test_weather(field, game) -> void:
 		#    판정이 날씨에 따라 깜빡인다. 넉넉히 안쪽에 둔다.
 		# ⚠️ **감각이 겨우 닿는 거리에 두지 않는다.** 150px 에 뒀더니 네 판에 한 번
 		#    감지가 안 잡혀 판정이 깜빡였다 — 어떤 감각으로도 확실히 닿는 자리에 둔다.
-		smelly_one.position = field.player.position + Vector2(60, 0)
+		smelly_one.position = field.player.position + dog_way
 		field.guide.set_weather_axes(clear_sky)
 		field._follow_player(1.0 / 60.0)
-		field.guide.update(field._active_companions(), field.sim.present_animals())
+		# ⚠️ **대상을 하나만 보여준다.** 여럿이면 잡는 것이 프레임마다 바뀌어
+		#    값이 판마다 깜빡인다 — 이 판정이 재려는 것은 "잡은 쪽으로 가는가" 하나다.
+		field.guide.update([lead_dog], [smelly_one])
 		await process_frame
 		ahead = maxf(ahead, lead_dog.position.distance_to(field.player.position))
 		toward = maxf(toward, (lead_dog.position - field.player.position)
@@ -1735,22 +1775,44 @@ func _test_weather(field, game) -> void:
 	# ★ **종을 보지 않는다.** 고양이도 자기가 잡은 쪽으로 가서 거기서 액션을 한다.
 	#   유도는 동료의 감각이 만드는 것이지 그 동료가 개라서가 아니다 (원칙 4).
 	var seeing := _find_animal(field, "squirrel")
-	for step in 200:
+	# ⚠️ **재는 동안 내내 잰다.** 마지막 한 프레임만 보면 그때 잡은 것이 바뀌어 있어
+	#    값이 판마다 깜빡인다 (실제로 네 판에 한 번 8px 이 나왔다).
+	var cat_best := 0.0
+	lead_cat.position = field.player.position
+	# ⚠️ 대상을 **동료가 갈 수 있는 쪽**에 둔다. 물이나 바위 쪽에 두면 동료가 도중에
+	#    멈춰서, 유도가 되는데도 "안 간다" 로 읽힌다.
+	var cat_way := Vector2(0, -40)
+	for turn in 8:
+		var probe := Vector2.RIGHT.rotated(TAU * float(turn) / 8.0) * 40.0
+		if field.terrain.can_stand(field.player.position + probe, field.schema,
+				lead_cat.habitat):
+			cat_way = probe
+			break
+	for step in 240:
 		seeing.present = true
-		seeing.position = field.player.position + Vector2(0, -60)
+		# ⚠️ 시야는 지형에 깎인다(숲에서 짧아진다). 지형까지 못 박을 게 아니면
+		#    **어떤 지형에서도 닿는 거리**에 둬야 판정이 안 깜빡인다.
+		seeing.position = field.player.position + cat_way
 		field.guide.set_weather_axes(clear_sky)
 		field._follow_player(1.0 / 60.0)
-		field.guide.update(field._active_companions(), field.sim.present_animals())
+		field.guide.update([lead_cat], [seeing])
 		await process_frame
-	if field.guide.leads.has(lead_cat):
-		var cat_way: Vector2 = lead_cat.position - field.player.position
-		var wanted: Vector2 = (field.guide.leads[lead_cat].animal.position
-			- field.player.position).normalized()
-		_check("고양이도 자기가 잡은 쪽으로 간다", cat_way.dot(wanted) > leash * 0.5,
-			"%.0fpx" % cat_way.dot(wanted))
+		if field.guide.leads.has(lead_cat):
+			var way: Vector2 = (field.guide.leads[lead_cat].animal.position
+				- field.player.position).normalized()
+			cat_best = maxf(cat_best,
+				(lead_cat.position - field.player.position).dot(way))
+	# ⚠️ 조건부로 감싸면 통과 수가 판마다 달라져서 "조용히 사라짐" 과 구분이 안 된다.
+	var cat_leads: bool = field.guide.leads.has(lead_cat)
+	_check("고양이가 무언가를 잡았다", cat_leads)
+	if cat_leads:
+		_check("고양이도 자기가 잡은 쪽으로 간다", cat_best > 18.0,
+			"%.0fpx (목표 %.0fpx)" % [cat_best, minf(40.0, leash)])
 		_check("고양이도 거기서 액션을 한다", lead_cat.play_special)
-		_check("액션 그림이 종마다 있다",
-			SpriteLibrary.has_art(lead_cat.species_id))
+	else:
+		_check("고양이도 자기가 잡은 쪽으로 간다", false, "잡은 게 없다")
+		_check("고양이도 거기서 액션을 한다", false, "잡은 게 없다")
+	_check("액션 그림이 종마다 있다", SpriteLibrary.has_art(lead_cat.species_id))
 
 	# 잡은 게 없으면 제자리로 돌아온다 — 늘 앞서 있으면 그게 유도로 안 읽힌다
 	var was_present := {}
@@ -1766,8 +1828,34 @@ func _test_weather(field, game) -> void:
 			< field.tuning.follow_distance * field.tuning.tile_size + 24.0,
 		"%.0fpx" % lead_dog.position.distance_to(field.player.position))
 	_check("곁에 있을 때는 안 흔든다", not lead_dog.play_special)
+
+	# ★ **잡은 게 없으면 곁에서 어슬렁거린다** (사용자 지적).
+	#   자리에 딱 붙여 세웠더니 플레이어에게 들러붙은 것처럼 보였다.
+	var stops := 0
+	var spots := {}
+	for step in 600:
+		field._follow_player(1.0 / 60.0)
+		field.guide.update([], [])
+		await process_frame
+		spots[Vector2i(lead_dog.position.round())] = true
+		if lead_dog.move_vector.length() > 0.05:
+			stops += 1
+	_check("곁에서 돌아다닌다 — 들러붙지 않는다", spots.size() > 12,
+		"%d 곳 · 걷는 프레임 %d/600" % [spots.size(), stops])
+	_check("가끔은 선다 — 늘 움직이면 부산하다", stops < 580,
+		"걷는 프레임 %d/600" % stops)
+	_check("그래도 곁을 떠나지는 않는다",
+		lead_dog.position.distance_to(field.player.position)
+			< field.tuning.tile_size * 4.0,
+		"%.0fpx" % lead_dog.position.distance_to(field.player.position))
 	for animal in was_present:
 		animal.present = bool(was_present[animal])
+	# ⚠️ 잰 뒤에는 **자리도 되돌린다.** 안 그러면 뒤에 오는 판정이 여기서 옮겨 둔
+	#    플레이어·동료 자리를 물려받아 엉뚱한 값을 본다.
+	field.player.position = field._bounds.size * 0.5
+	for companion in field.companions:
+		companion.position = field.player.position
+	field.player.move_vector = Vector2.ZERO
 	field.set_process(true)
 
 	# ★ **게이지는 동물 머리 위에 뜬다** (ui/screens.json · 사용자 지적).
@@ -1862,6 +1950,32 @@ func _test_weather(field, game) -> void:
 		if int(party_kinds[id]) > 1:
 			doubled.append(id)
 	_check("필드에 같은 동료가 둘 나오지 않는다", doubled.is_empty(), "%s" % [doubled])
+
+	# ★ **걷는 두 칸이 같으면 발이 안 움직인다** (사용자 지적).
+	#   바운스는 노드 Y가 내지만, 다리가 그대로면 미끄러지는 것으로 보인다.
+	var walk_frames: SpriteFrames = field.player.get_node("Body/BodySprite").sprite_frames
+	for pose in ["move_south", "move_side", "move_north"]:
+		if not walk_frames.has_animation(pose):
+			_check("%s 걷기 그림이 있다" % pose, false)
+			continue
+		_check("%s 는 두 칸이다" % pose, walk_frames.get_frame_count(pose) == 2,
+			"%d 칸" % walk_frames.get_frame_count(pose))
+		var a := walk_frames.get_frame_texture(pose, 0).get_image()
+		var b := walk_frames.get_frame_texture(pose, 1).get_image()
+		var differ := 0
+		for y in a.get_height():
+			for x in a.get_width():
+				if a.get_pixel(x, y) != b.get_pixel(x, y):
+					differ += 1
+		_check("%s 의 두 칸이 다르다 — 발이 움직인다" % pose, differ >= 10,
+			"%d 픽셀" % differ)
+		# 달라지는 곳은 **아래쪽(다리)** 이어야 한다 — 머리가 흔들리면 그건 걷기가 아니다
+		var high := 0
+		for y in range(0, int(a.get_height() * 0.6)):
+			for x in a.get_width():
+				if a.get_pixel(x, y) != b.get_pixel(x, y):
+					high += 1
+		_check("%s 는 다리만 움직인다" % pose, high == 0, "위쪽이 %d 픽셀 달라졌다" % high)
 
 	# ★ 실제 날씨는 튀지 않는다 — 지금과 가까운 상태로만 옮겨간다 (사용자 지적)
 	var walker := WeatherSystem.new()

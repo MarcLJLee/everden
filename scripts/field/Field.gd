@@ -53,6 +53,8 @@ var _puffs: Array = []
 var _promotion_px := 0.0
 var _props: Array = []
 var _region_name := ""
+## 동료마다의 어슬렁 목표. 잡은 게 없을 때 곁에서 조금씩 돌아다닌다.
+var _strolls := {}
 var _last_weather_name := ""
 ## 지금 원정 중인 지역. 세계 지도가 생기면 거기서 정해진다 (BRIEF §3.9).
 @export var region_id := "home_hills"
@@ -307,12 +309,17 @@ func _follow_player(delta: float) -> void:
 		var companion: Actor = active[index]
 		var lateral := tuning.tile_size * 0.9 * (1.0 if index % 2 == 0 else -1.0)
 		var goal := player.position + Vector2(lateral, tuning.follow_distance * tuning.tile_size)
+		# ★ **잡은 게 없으면 곁에서 어슬렁거린다** (사용자 지적).
+		#   자리에 딱 붙여 세웠더니 플레이어에게 들러붙은 것처럼 보였다 —
+		#   개는 따라오면서도 여기저기 코를 박는다. 그게 살아 있는 것으로 읽힌다.
+		goal += _stroll(companion, delta)
 		goal = lead_goal(companion, goal)
 		var to_goal := goal - companion.position
 		var distance := to_goal.length()
-		companion.speed_tiles = minf(
-			tuning.move_speed * tuning.companion_speed_scale,
-			distance / tuning.tile_size * 2.5)
+		# ⚠️ 목표가 가까우면 속도도 같이 줄어드는데, **바닥이 없으면 기어간다** —
+		#   곁에서 한 뼘 어슬렁거리는 데 몇 초가 걸려서 걷는 걸로 안 보인다.
+		companion.speed_tiles = clampf(distance / tuning.tile_size * 2.5,
+			tuning.move_speed * 0.45, tuning.move_speed * tuning.companion_speed_scale)
 		# ⚠️ 한 걸음 안쪽이면 **딱 붙여 세운다.** 지나쳤다 돌아오기를 반복하면
 		#    줄 끝에서 부르르 떨고, 멈춰야 나오는 **꼬리 흔들기가 안 나온다**
 		#    (특징 동작은 서 있을 때만 재생된다).
@@ -334,6 +341,23 @@ func lead_goal(companion: Actor, resting: Vector2) -> Vector2:
 	var toward: Vector2 = hit.animal.position - player.position
 	var far: float = minf(toward.length(), tuning.lead_leash * tuning.tile_size)
 	return player.position + toward.normalized() * far
+
+
+## 곁에서의 어슬렁. 잡은 게 있으면 lead_goal 이 이 값을 덮어쓴다.
+## ⚠️ 목표를 **가끔만** 바꾼다. 매 프레임 흔들면 걷는 게 아니라 떠는 것으로 보인다.
+func _stroll(companion: Actor, delta: float) -> Vector2:
+	var state: Dictionary = _strolls.get(companion, {"at": Vector2.ZERO, "left": 0.0})
+	state["left"] = float(state["left"]) - delta
+	if float(state["left"]) <= 0.0:
+		state["left"] = _rng.randf_range(1.4, 3.2)
+		# 반쯤은 제자리에 선다 — 늘 움직이면 그것대로 부산하다
+		if _rng.randf() < 0.45:
+			state["at"] = Vector2.ZERO
+		else:
+			state["at"] = Vector2.from_angle(_rng.randf() * TAU) \
+				* _rng.randf_range(0.4, 1.3) * tuning.tile_size
+	_strolls[companion] = state
+	return state["at"]
 
 
 func _sync_companion_visibility() -> void:

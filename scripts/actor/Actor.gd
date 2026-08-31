@@ -112,6 +112,26 @@ static func roll_sexes(count: int, rng: RandomNumberGenerator, required := "") -
 	return out
 
 
+## 플레이어는 종 데이터가 없다. 같은 모양의 딕셔너리를 만들어 넘겨서
+## Actor 안에 "플레이어면 이렇게" 하는 분기가 생기지 않게 한다.
+##
+## ⚠️ **한 벌만 둔다.** 필드·집·첫 만남이 각자 이 딕셔너리를 들고 있었더니
+##    머리 앵커가 [16,3] 과 [16,1] 로, 입은 있고 없고로 갈렸다 — 같은 아이가
+##    화면마다 다르게 생긴 것이다. 화면을 하나 더 만들 때마다 또 갈린다.
+static func player_config() -> Dictionary:
+	return {
+		"id": "player", "name": "나", "diet": "잡식", "activity": "주행성",
+		"size_class": "중", "senses": [], "traits": [],
+		"stats_range": {"sense_range": [1.0, 1.0], "charm": [1.0, 1.0]},
+		"sprite_set": {
+			"eye_style": "player", "mouth_style": "small",
+			"head_anchor": [16, 3],
+			# 플레이어만 4방향이다 — 동물은 측면 1방향 (BRIEF §4.5 ★ v3.16)
+			"facing": "four",
+		},
+	}
+
+
 ## config 는 animals.json 의 종 정의 한 덩어리다. 플레이어처럼 종이 없는 액터는
 ## 같은 모양의 딕셔너리를 만들어 넘긴다 — 특수 분기를 만들지 않기 위해서다.
 func setup(config: Dictionary, schema: TagSchema, tuning: FieldTuning,

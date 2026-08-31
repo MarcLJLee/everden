@@ -629,6 +629,100 @@ def invite_card(sp="water_deer", male=True, stage="어른", age=3, is_new=True, 
     return im
 
 
+# ── 6.55 커플 카드 — 집에서 가끔 일어나는 일 (§2.11) ────────────────
+# ★ **거절이 없다.** 7살에게 두 동물이 친해지는 걸 거절하게 하는 건 이상하고,
+#   거절이 있으면 "잘못 눌렀다" 가 생긴다 (원칙 2). 아이가 하는 것은 **축하 한 번**이다.
+# ★ 초대 카드(§3.12)와 **같은 모양**이다 — 아이가 이미 배운 화면이라 새로 가르칠 게 없다.
+# ★ 새로 그리는 도트 **0장.** 몸통은 하나를 뒤집어 마주 보게 하고,
+#   하트·성별 뱃지·발자국은 이미 있다.
+
+def couple_mark(im, cx, base_y):
+    """집 화면에서 두 동물 **사이 위**에 뜨는 하트. §3.3 과 같은 규약 —
+    판을 두르지 않고 1배 + 1px 그림자 + 꼬리 3px."""
+    day = G.PALETTES["day"]
+    ic = HEART.img(day)
+    x, y = cx - ic.width//2, base_y - ic.height - 4
+    sh = Image.new("RGBA", ic.size, (0, 0, 0, 0))
+    sh.paste(Image.new("RGBA", ic.size, (14, 16, 20, 170)), (0, 0), ic)
+    im.alpha_composite(sh, (x+1, y+1)); im.alpha_composite(ic, (x, y))
+    d = ImageDraw.Draw(im)
+    for r in range(3):
+        d.line([(cx-(2-r), y+ic.height+r), (cx+(2-r), y+ic.height+r)], fill=(24, 30, 38, 235))
+    return im
+
+
+def home_couple():
+    """집에서 커플링이 일어나는 순간 — **화면을 안 막는다.**
+    두 아이 사이에 하트가 떠오르고, 아이가 다가가면 카드가 열린다."""
+    im = Hm.home_screen(0.30, hint=False)
+    day = G.PALETTES["day"]
+    a = sprite_of("dog"); b = sprite_of("cat", "cat_ginger").transpose(Image.FLIP_LEFT_RIGHT)
+    ax, ay = 356, 300   # 플레이어와 겹치지 않는 빈 잔디
+    im.alpha_composite(a, (ax, ay - a.height))
+    im.alpha_composite(b, (ax + a.width + 10, ay - b.height))
+    couple_mark(im, ax + (a.width + 10 + b.width)//2, ay - a.height)
+    return im
+
+
+def couple_card(left=("dog", "dog_default", "탄이", True),
+                right=("cat", "cat_ginger", "나비", False),
+                seat=(4, 5)):
+    """가족이 된 순간. seat 여유가 없으면 **미리 말해준다** (원칙 3)."""
+    im = Hm.home_screen(0.30, hint=False)
+    im.alpha_composite(Image.new("RGBA", (W, H), (6, 8, 12, 172)))
+    day = G.PALETTES["day"]
+
+    pw, ph = 400, 286
+    px_, py_ = (W-pw)//2, 38
+    panel(im, px_, py_, pw, ph, fill=(22, 22, 30, 242))
+    cx = px_ + pw//2
+
+    T.ktext(im, "가족이 됐어요!", cx, py_ + 12, ACC, scale=3)
+
+    # 두 마리가 **마주 본다** — 오른쪽을 뒤집으면 된다. 도트 0장
+    arts, base = [], py_ + 128
+    for i, (sp, pal, _, _) in enumerate((left, right)):
+        art = sprite_of(sp, pal)
+        if i: art = art.transpose(Image.FLIP_LEFT_RIGHT)
+        k = max(2, min(3, 72 // max(1, art.height)))
+        arts.append(art.resize((art.width*k, art.height*k), Image.NEAREST))
+    gap = 44
+    tot = arts[0].width + gap + arts[1].width
+    x = cx - tot//2
+    for art in arts:
+        im.alpha_composite(art, (x, base - art.height))
+        x += art.width + gap if art is arts[0] else 0
+
+    h = HEART.img(day)
+    hb = h.resize((h.width*2, h.height*2), Image.NEAREST)
+    # 하트는 **두 얼굴 사이**에 온다 — 위로 띄우면 제목에 붙어 버린다
+    im.alpha_composite(hb, (cx - hb.width//2, base - 58))
+
+    # 이름 + 성별 뱃지. 뱃지가 이름 **왼쪽에** 붙어 한 덩어리로 읽힌다
+    for i, (_, _, name, male) in enumerate((left, right)):
+        nx = cx - 108 + i*216
+        badge = (SEX_M if male else SEX_F).img(day)
+        im.alpha_composite(badge, (nx - 34, py_ + 142))
+        T.ktext(im, name, nx + 6, py_ + 142, INK, scale=2)
+
+    # ★ 다음에 무슨 일이 생기는지 **여기서 말한다** — 안 그러면 "왜 아기가 안 나와?" 가 된다
+    room = seat[0] < seat[1]
+    T.ktext(im, "이제 아기를 기다려요" if room else "자리가 하나 생기면 아기가 와요",
+            cx, py_ + 180, DIM if room else INK, scale=1)
+    # 자리는 **자리가 없을 때만** 눈에 띈다 (있을 때 강조하면 잔소리가 된다)
+    im.alpha_composite(T.cursor(), (cx - 40, py_ + 200))
+    T.draw_text(im, f"{seat[0]} / {seat[1]}", cx - 12, py_ + 202,
+                INK if room else ACC, scale=2)
+    if not room:
+        T.ktext(im, "쉼터로 보내면 자리가 나요", cx, py_ + 224, DIM, scale=1)
+
+    by = py_ + ph - 46
+    panel(im, cx - 74, by, 148, 30, fill=(52, 44, 30, 240))
+    T.ktext(im, "잘됐다!", cx + 8, by + 7, INK, scale=2)
+    im.alpha_composite(T.cursor(), (cx - 64, by + 8))
+    return im
+
+
 # ── 6.6 첫 만남 — **튜토리얼이 아니라 첫 번째 초대다** (§2.9) ──────────
 # ★ 여기서 배우는 조작이 **본편과 같아야** 한다. 다른 코드로 다른 규칙을 만들면
 #   아이가 여기서 배운 것이 필드에서 안 통한다. 게이지도 카드도 같은 것을 쓴다.
@@ -1076,6 +1170,34 @@ def _save_screens(d):
                                 "Field.gd 의 `_partial_invites()` 가 이미 그 값을 준다"),
                     "on_done": "초대 카드(§3.12)",
                 }},
+            "couple": {
+                "_note": ("집에서 가끔 일어나는 커플링 (BRIEF §2.11). "
+                          "★ **거절이 없다** — 아이가 하는 것은 축하 한 번이다. "
+                          "초대 카드(§3.12)와 같은 모양이라 새로 가르칠 게 없다. **새 도트 0장.**"),
+                "stage1_mark": {
+                    "_comment": "화면을 막지 않는다. 두 동물 **사이 위**에 하트가 뜬다",
+                    "art": "ui/pair_ok.png",
+                    "style": "판 없이 1배 + 1px 그림자 + 꼬리 3px (§3.3 과 같은 규약)",
+                    "then": "아이가 다가가면 카드가 열린다. 안 가도 진행은 된다",
+                },
+                "stage2_card": {"elements": [
+                    {"id": "제목", "kind": "text", "what": "가족이 됐어요!"},
+                    {"id": "두_마리", "kind": "art",
+                     "what": ("★ **마주 본다** — 오른쪽 한 마리를 flip_h 하면 된다. 도트 0장. "
+                              "실루엣 높이를 맞춰 정수배로만 키운다")},
+                    {"id": "하트", "kind": "art", "what": "ui/pair_ok.png 2배. **두 얼굴 사이**에 온다"},
+                    {"id": "이름·성별", "kind": "art",
+                     "what": "성별 뱃지가 이름 **왼쪽에** 붙어 한 덩어리로 읽힌다"},
+                    {"id": "다음에_무슨_일", "kind": "text",
+                     "what": ("★ 자리가 있으면 '이제 아기를 기다려요', 없으면 "
+                              "'자리가 하나 생기면 아기가 와요'. **여기서 말하지 않으면 "
+                              "'왜 아기가 안 나와' 가 된다** (원칙 3)")},
+                    {"id": "자리", "kind": "count",
+                     "what": "발자국 + n/max. **자리가 꽉 찼을 때만 강조색** — 있을 때 강조하면 잔소리가 된다"},
+                    {"id": "빠져나갈_길", "kind": "text",
+                     "what": "자리가 꽉 찼을 때만: '쉼터로 보내면 자리가 나요'. 막다른 길을 만들지 않는다"},
+                    {"id": "확인", "kind": "text", "what": "**잘됐다!** 하나뿐이다 — 거절 버튼을 만들지 않는다"},
+                ]}},
             "field_home": {
                 "_note": "필드를 나오는 문 (§3.13). START 로 열고 닫는다",
                 "elements": [
@@ -1112,6 +1234,12 @@ def sheet():
          "동료가 냄새를 맡고 발자국으로 방향을 가리킨다. 지면 단서는 동료 없이도 보인다"),
         ("필드 · 친해지는 중", field_hud("bond"),
          "점유 시간 게이지. 시작하면 반드시 완료된다 — 방해도 실패도 없다 (원칙 2)"),
+        ("집 — 커플링이 일어나는 순간", home_couple(),
+         "화면을 안 막는다. 두 아이 사이에 하트가 뜨고, 다가가면 카드가 열린다"),
+        ("커플 카드", couple_card(),
+         "거절이 없다 — 아이가 하는 것은 축하 한 번이다. 새 도트 0장"),
+        ("커플 카드 · 자리가 꽉 참", couple_card(seat=(5, 5)),
+         "다음에 무슨 일이 생기는지 여기서 말한다 — 안 그러면 '왜 아기가 안 나와' 가 된다"),
         ("초대 카드", invite_card("water_deer", True, "어른", 3, True),
          "축하지 평가가 아니다 — 능력치 숫자를 띄우면 '다시 뽑을까'가 생긴다. 새 도트 0장"),
         ("팀 편성 · 출발", team_screen(1),

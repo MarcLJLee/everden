@@ -11,6 +11,7 @@ extends Control
 const ACTOR_SCENE := "res://scenes/actors/Actor.tscn"
 const TUNING_PATH := "res://tuning/field_tuning.tres"
 const MAP_SCENE := "res://scenes/ui/WorldMap.tscn"
+const SHELTER_SCENE := "res://scenes/home/Shelter.tscn"
 const HANGUL_FONT := "res://fonts/Galmuri11.ttf"
 
 @onready var _world: Node2D = $World
@@ -34,8 +35,8 @@ var objects: Array = []
 var residents: Array = []
 
 ## 재화와 자리 — HUD 는 이 둘뿐이다
-var coins := 120
-var seats := 4
+## ⚠️ 재화와 자리는 **GameState 가 들고 있다.** 화면이 들고 있으면 껐다 켤 때 사라지고,
+##    필드 HUD 와 집 HUD 가 서로 다른 값을 말한다 (실제로 `자리 6/4` 가 떴다).
 
 var _rng := RandomNumberGenerator.new()
 var _leaving := false
@@ -47,6 +48,9 @@ var _sky_hold := 0.0
 ## 축하를 기다리는 커플들. [{id, mark, at}]
 var _waiting: Array = []
 var _species_by_id := {}
+
+## 쉼터로 들어가는 자리. 마당 왼쪽 — 대문(아래)과 집(위)에서 떨어뜨린다.
+var shelter_at := Vector2.ZERO
 
 
 func _ready() -> void:
@@ -69,6 +73,8 @@ func _ready() -> void:
 	_spawn_residents(result.species, view)
 	_species_by_id = result.species
 	_mark_new_couples(result.species)
+	shelter_at = Vector2(yard.yard.position.x + 26,
+		yard.yard.position.y + yard.yard.size.y * 0.62)
 	_spawn_player(view)
 	# 집은 맑고 구름이 흐르는 정도만 한다. 비·안개·빛줄기는 없다.
 	_weather_layers.build(["cloud", "sun"])
@@ -192,7 +198,7 @@ func _check_couple_visit() -> void:
 		for one in Game.collection:
 			if String(one["species_id"]) == id:
 				pair.append(one)
-		_couple.show_for(_species_by_id.get(id, {}), pair, residents.size(), seats, schema)
+		_couple.show_for(_species_by_id.get(id, {}), pair, residents.size(), Game.seats(), schema)
 		(wait["mark"] as Node2D).queue_free()
 		_waiting.remove_at(i)
 		return
@@ -203,8 +209,10 @@ func _check_couple_visit() -> void:
 ## ★ 마당에 있는 것은 **모아온 아이들**이지 데이터에 있는 종이 아니다.
 ##   예전엔 "그림이 있는 모든 종" 을 뿌렸더니 아트가 들어올 때마다 식구가 늘었다
 ##   (사용자 지적 — "껐다 킬 때마다 자꾸 집에 있는 동물이 늘어나고 있다").
+## ★ 마당에는 **집에 있는 아이들**만 선다. 쉼터에 있는 아이는 쉼터에 있다 —
+##   양쪽에 다 서 있으면 자리 숫자가 거짓말이 된다.
 func _spawn_residents(species_by_id: Dictionary, view: FieldTuning) -> void:
-	for one in Game.collection:
+	for one in Game.home_members():
 		var id := String(one["species_id"])
 		var species: Dictionary = species_by_id.get(id, {})
 		if species.is_empty():
@@ -277,16 +285,9 @@ func lonely_species() -> Dictionary:
 
 
 func _spawn_player(view: FieldTuning) -> void:
-	var config := {
-		"id": "player", "name": "나", "diet": "잡식", "activity": "주행성",
-		"size_class": "중", "senses": [], "traits": [],
-		"stats_range": {"sense_range": [1.0, 1.0], "charm": [1.0, 1.0]},
-		# 플레이어만 4방향이다 — 동물은 측면 1방향 (BRIEF §4.5 ★ v3.16)
-		"sprite_set": {"eye_style": "player", "head_anchor": [16, 1], "facing": "four"},
-	}
 	player = load(ACTOR_SCENE).instantiate()
 	_actors.add_child(player)
-	player.setup(config, schema, view, _rng)
+	player.setup(Actor.player_config(), schema, view, _rng)
 	player.speed_tiles = view.move_speed
 	# 울타리를 못 지나간다. 대문 구간에서만 아래로 나갈 수 있다.
 	player.confine = func(from: Vector2, at: Vector2) -> Vector2:
@@ -308,6 +309,7 @@ func _process(delta: float) -> void:
 		resident.update(delta, objects, yard.yard, _rng)
 	_drift_sky(delta)
 	_weather_layers.update(delta, _sky, Rect2(Vector2(-160, -90), Vector2(960, 540)))
+	_check_shelter()
 	_check_gate()
 	_refresh_hud()
 	_hud.queue_redraw()
@@ -321,6 +323,17 @@ func _drift_sky(delta: float) -> void:
 		_sky_target = _rng.randf_range(0.08, 0.42)
 		_sky_hold = _rng.randf_range(18.0, 40.0)
 	_sky["cloud"] = move_toward(float(_sky["cloud"]), _sky_target, delta / 20.0)
+
+
+## 쉼터로 가는 자리. **대문처럼 자동으로 열지 않는다** — 마당 안에 있어서
+## 지나가다 밟으면 끌려 들어간다. 서서 누르는 편이 예측 가능하다.
+func _check_shelter() -> void:
+	if player.position.distance_to(shelter_at) > 20.0:
+		return
+	if not Input.is_action_just_pressed("interact"):
+		return
+	_leaving = true
+	get_tree().change_scene_to_file.call_deferred(SHELTER_SCENE)
 
 
 ## 대문으로 걸어 나가면 필드다. 열린 문이 곧 안내다 — 따로 묻지 않는다.
@@ -339,8 +352,16 @@ func _check_gate() -> void:
 func _hud_draw() -> void:
 	_hud.draw_rect(Rect2(6, 8, 104, 42), Color(0, 0, 0, 0.45))
 	BitmapFont5.draw(_hud, "OUT", yard.gate + Vector2(-9, -34), Color(0.92, 0.90, 0.84, 0.85), 1)
+	if not shelter_at.is_zero_approx():
+		var waiting := Game.shelter_members().size()
+		_hud.draw_rect(Rect2(shelter_at - Vector2(15, 8), Vector2(30, 16)), Color(0, 0, 0, 0.30))
+		BitmapFont5.draw(_hud, "SHELTER", shelter_at + Vector2(-20, -20),
+			Color(0.92, 0.90, 0.84, 0.85), 1)
+		if waiting > 0:
+			BitmapFont5.draw(_hud, "%d" % waiting, shelter_at + Vector2(-2, -4),
+				Color(0.95, 0.92, 0.72, 0.95), 1)
 
 
 func _refresh_hud() -> void:
-	_coin_label.text = "재화  %d" % coins
-	_seat_label.text = "자리  %d / %d" % [residents.size(), seats]
+	_coin_label.text = "재화  %d" % Game.coins
+	_seat_label.text = "자리  %d / %d" % [residents.size(), Game.seats()]

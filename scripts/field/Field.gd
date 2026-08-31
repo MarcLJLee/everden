@@ -130,7 +130,7 @@ func _ready() -> void:
 	_go_home.faces_provider = _going_home_faces
 	_go_home.schema_provider = func() -> TagSchema: return schema
 	# 늘 보이는 것은 **지명과 자리 둘뿐**이다 (BRIEF §3.4).
-	_hud.refresh(String(region.get("name", "")), Game.collection.size(), tuning.home_seats)
+	_hud.refresh(String(region.get("name", "")), Game.home_members().size(), Game.seats())
 	_go_home.go_home.connect(func() -> void:
 		# ★ 짝은 **돌아올 때** 정해진다. 데려오자마자 바로 되는 게 아니다 (사용자 지적).
 		Game.rolled_pairs = Game.roll_pairs()
@@ -192,28 +192,15 @@ func _process(delta: float) -> void:
 	_apply_eyeshine()
 	_update_interaction(delta)
 	metrics.update(delta)
-	_hud.refresh(String(_region_name), Game.collection.size(), tuning.home_seats)
+	_hud.refresh(String(_region_name), Game.home_members().size(), Game.seats())
 	_gauge_marks.show_marks(_gauge_marks_now())
 	_overlay.refresh(_build_state())
 
 
 # --- 스폰 -------------------------------------------------------------------
 
-## 플레이어는 종 데이터가 없다. 같은 모양의 딕셔너리를 만들어 넘겨서
-## Actor 안에 "플레이어면 이렇게" 하는 분기가 생기지 않게 한다.
 func _spawn_player() -> void:
-	var config := {
-		"id": "player", "name": "나", "diet": "잡식", "activity": "주행성",
-		"size_class": "중", "senses": [], "traits": [],
-		"stats_range": {"sense_range": [1.0, 1.0], "charm": [1.0, 1.0]},
-		"sprite_set": {
-			"eye_style": "player", "mouth_style": "small",
-			"head_anchor": [16, 3],
-			# 플레이어만 4방향이다 — 동물은 측면 1방향 (BRIEF §4.5 ★ v3.16)
-			"facing": "four",
-		},
-	}
-	player = _make_actor(config)
+	player = _make_actor(Actor.player_config())
 	# ⚠️ 한가운데가 물이나 바위면 그대로 갇힌다 — 설 수 있는 가장 가까운 자리로 옮긴다.
 	player.position = terrain.nearest_standing(_bounds.size * 0.5, schema, [])
 	player.speed_tiles = tuning.move_speed

@@ -7,7 +7,7 @@
 extends SceneTree
 
 ## 이 아래로 떨어지면 어딘가에서 판정이 조용히 끊긴 것이다.
-const FLOOR := 442
+const FLOOR := 481
 
 var _pass := 0
 var _fail := 0
@@ -66,6 +66,7 @@ func _run() -> void:
 	await _test_eyeshine(field)
 	await _test_puff(field)
 	await _test_invite(field)
+	await _test_seats(game)
 
 	# ⚠️ 판정 하나가 터지면 그 함수의 **나머지가 통째로 안 돈다.** 실패가 아니라
 	#    "조용히 사라짐" 이라 눈치채기 어렵다 — 이 프로젝트에서 다섯 번 겪었다.
@@ -1836,9 +1837,14 @@ func _test_weather(field, game) -> void:
 	#   자리에 딱 붙여 세웠더니 플레이어에게 들러붙은 것처럼 보였다.
 	# ⚠️ 어슬렁은 **1.4~3.2초마다** 목표를 바꾸고 반쯤은 제자리에 선다. 10초만 재면
 	#    운 나쁘게 서 있는 목표가 몰려 값이 깜빡인다 — 30초를 재서 평균이 이기게 한다.
+	# ⚠️ **플레이어를 세워 놓고 잰다.** 앞선 판정이 남긴 입력이 그대로 흐르면
+	#    30초 내내 플레이어가 걸어가고, 동료는 영영 못 따라잡아 1800/1800 이 나온다
+	#    — 동료가 부산한 게 아니라 **판정이 딴 것을 재고 있었다.**
+	field.player.move_vector = Vector2.ZERO
 	var stops := 0
 	var spots := {}
 	for step in 1800:
+		field.player.move_vector = Vector2.ZERO
 		field._follow_player(1.0 / 60.0)
 		field.guide.update([], [])
 		await process_frame
@@ -2582,3 +2588,187 @@ func _check(label: String, condition: bool, detail := "") -> void:
 	else:
 		_fail += 1
 		print("  [실패] %s %s" % [label, ("— " + detail) if detail != "" else ""])
+
+
+## 자리 · 쉼터 · 자리 확장 (BRIEF §2.4 · §2.6)
+##
+## ★ 여기서 지키는 것은 숫자가 아니라 **약속**이다 — 초대는 거절되지 않고,
+##   쉼터는 벤치가 아니며, 방출은 없다. 셋 다 원칙 2·6 에 직결된다.
+func _test_seats(game: GameState) -> void:
+	var g := GameState.new()
+	g.autosave = false
+	g.start_new()
+
+	# --- 자리는 도감이 늘려준다 -------------------------------------------
+	var start_seats := g.seats()
+	for id in ["dog", "cat", "squirrel"]:
+		g.add(id)
+	_check("새 종을 만나면 자리가 는다", g.seats() > start_seats,
+		"%d → %d" % [start_seats, g.seats()])
+
+	# ⚠️ 종 하나에 자리 하나면 **쉼터가 영영 안 쓰인다.** 자리를 먹는 것은 개체다.
+	var deep := GameState.new()
+	deep.autosave = false
+	deep.start_new()
+	for i in 3:
+		deep.add("dog")
+		deep.add("cat")
+	_check("같은 종을 여럿 모으면 자리가 모자라진다",
+		deep.shelter_members().size() > 0,
+		"집 %d/%d · 쉼터 %d" % [deep.home_members().size(), deep.seats(),
+		deep.shelter_members().size()])
+
+	# --- 초대는 거절되지 않는다 (원칙 2) -----------------------------------
+	var before := deep.collection.size()
+	var overflow := deep.add("otter")
+	_check("자리가 꽉 차도 초대는 받아진다", deep.collection.size() == before + 1)
+	_check("넘친 아이는 쉼터에서 지낸다", String(overflow["at"]) == "shelter",
+		String(overflow.get("at", "?")))
+
+	# --- 집과 쉼터는 겹치지 않는다 ------------------------------------------
+	_check("집 + 쉼터 = 전부",
+		deep.home_members().size() + deep.shelter_members().size() == deep.collection.size())
+	_check("집 정원을 넘지 않는다", deep.home_members().size() <= deep.seats(),
+		"%d / %d" % [deep.home_members().size(), deep.seats()])
+
+	# --- 쉼터의 아이도 원정에 간다 (§2.4) ------------------------------------
+	var guest: Dictionary = deep.shelter_members()[0]
+	deep.toggle_party(int(guest["uid"]))
+	_check("쉼터에 있어도 원정 동료가 된다", deep.going(int(guest["uid"])))
+	deep.toggle_party(int(guest["uid"]))
+
+	# --- 집 ↔ 쉼터는 자유롭고, 되돌릴 수 있다 --------------------------------
+	var uid := int(guest["uid"])
+	deep.move_to(uid, "home")
+	_check("쉼터에서 집으로 온다", String(deep.of_uid(uid).get("at", "")) == "home")
+	deep.move_to(uid, "shelter")
+	_check("집에서 쉼터로 되돌아간다", String(deep.of_uid(uid).get("at", "")) == "shelter")
+	_check("오가도 아무도 사라지지 않는다", deep.collection.size() == before + 1,
+		str(deep.collection.size()))
+
+	# --- 재화 — 빚을 지지 않는다 (§2.6) --------------------------------------
+	var poor := GameState.new()
+	poor.autosave = false
+	poor.start_new()
+	poor.coins = GameState.SEAT_PRICE - 1
+	var seats_before := poor.seats()
+	_check("재화가 모자라면 자리를 못 넓힌다", not poor.buy_seat())
+	_check("모자랄 때 재화가 줄지 않는다", poor.coins == GameState.SEAT_PRICE - 1,
+		str(poor.coins))
+	_check("모자랄 때 자리도 그대로다", poor.seats() == seats_before)
+	poor.coins = GameState.SEAT_PRICE
+	_check("재화가 있으면 자리를 넓힌다", poor.buy_seat())
+	_check("자리가 하나 늘었다", poor.seats() == seats_before + 1,
+		"%d → %d" % [seats_before, poor.seats()])
+	_check("재화는 자리에만 쓴다 — 값을 치른다", poor.coins == 0, str(poor.coins))
+
+	# --- 쉼터 화면은 **장소**다 --------------------------------------------
+	# ⚠️ 오토로드를 빌려 쓴다 — **원래 값을 되돌려 놓는다.** 뒤에 오는 판정이
+	#    여기서 심어 둔 식구를 물려받으면 엉뚱한 값을 본다.
+	var kept := {"collection": game.collection, "seen": game.seen,
+		"bought_seats": game.bought_seats, "coins": game.coins,
+		"party": game.party, "autosave": game.autosave}
+	game.autosave = false
+	game.collection = deep.collection.duplicate(true)
+	game.seen = deep.seen.duplicate()
+	game.bought_seats = deep.bought_seats
+	game.coins = deep.coins
+	var shelter: Control = load("res://scenes/home/Shelter.tscn").instantiate()
+	root.add_child(shelter)
+	await process_frame
+	await process_frame
+
+	_check("쉼터에는 걸어 들어간 내가 있다", shelter.player != null)
+	_check("쉼터에 있는 아이가 서 있다", shelter.guests.size() == deep.shelter_members().size(),
+		"%d / %d" % [shelter.guests.size(), deep.shelter_members().size()])
+
+	# ★ **창고나 우리처럼 보이면 안 된다.** 집 마당 바닥을 그대로 쓰면 같은 곳으로 읽힌다.
+	var home_ground := "초원"
+	_check("쉼터 바닥은 집 마당과 다르다",
+		shelter.terrain.at_tile(Vector2i(10, 10)) != home_ground,
+		shelter.terrain.at_tile(Vector2i(10, 10)))
+	# 울타리를 두르지 않는다 — 가둔 곳이 아니다
+	var fenced := false
+	for child in shelter.get_node("World/Props").get_children():
+		if child is Sprite2D and String((child as Sprite2D).texture.resource_path).contains("fence"):
+			fenced = true
+	_check("쉼터에 울타리가 없다", not fenced)
+	# 자는 자리가 보인다 — 쉬는 곳으로 읽히게
+	_check("그늘막과 방석이 놓여 있다",
+		shelter.get_node("World/Props").get_child_count() > 0)
+
+	# ★ **방출은 없다** (원칙 2). 소스를 낱말로 뒤지지 않는다 — "방출은 없다" 고 적은
+	#   주석이 방출로 읽혔다. **개체를 없애는 함수 자체가 없다**는 것이 진짜 주장이다.
+	var removers := PackedStringArray()
+	# ⚠️ Object 가 물려주는 remove_child·remove_meta 까지 세면 안 된다. **우리가 쓴 것만** 본다.
+	for entry in load("res://scripts/game/GameState.gd").get_script_method_list():
+		for word in ["release", "remove", "erase", "abandon", "drop"]:
+			if String(entry["name"]).begins_with("_"):
+				continue
+			if String(entry["name"]).contains(word):
+				removers.append(String(entry["name"]))
+	_check("아이를 없애는 길이 아예 없다", removers.is_empty(), ", ".join(removers))
+
+	# --- 시간이 정지한다 (§2.4) --------------------------------------------
+	var guest_actor: Actor = shelter.guests[0]["actor"]
+	_check("대기 중인 아이는 느리게 지낸다",
+		guest_actor.speed_tiles < shelter.tuning.wild_speed,
+		"%.2f < %.2f" % [guest_actor.speed_tiles, shelter.tuning.wild_speed])
+
+	# --- 꽉 차면 막지 말고 묻는다 -------------------------------------------
+	# ⚠️ **꽉 찬 상태를 만들어 놓고 묻는다.** 도감이 자리를 늘려 주기 때문에
+	#    아무렇게나 모으면 자리가 남아서, 이 아래 판정이 전부 헛돈다.
+	while game.home_members().size() < game.seats():
+		game.add("dog")
+	_check("자리가 꽉 차 있다", game.home_members().size() == game.seats(),
+		"%d / %d" % [game.home_members().size(), game.seats()])
+	var whole := game.collection.size()
+	var waiting := game.shelter_members().size()
+	shelter._take_home(0)
+	await process_frame
+	_check("꽉 찼을 때 데려가려 하면 바꿀 상대를 묻는다", not shelter._swap.is_empty(),
+		"%d" % shelter._swap.size())
+	_check("바꾸기 전에는 아무것도 안 옮겨진다",
+		game.shelter_members().size() == waiting,
+		"%d / %d" % [game.shelter_members().size(), waiting])
+	shelter._focus()
+	_check("무엇을 묻는지 화면에 적힌다",
+		String(shelter.get_node("Text/Prompt").text) == "누구랑 바꿀까요?",
+		String(shelter.get_node("Text/Prompt").text))
+	# ★ 얼굴로 고른다 — 이름을 나열하지 않는다 (§3.9)
+	var row := shelter.get_node_or_null("SwapRow")
+	_check("바꿀 상대를 얼굴로 고른다", row != null and row.get_child_count() > 0)
+
+	# ★ 바꿔도 **아무도 사라지지 않는다.** 둘 다 계속 내 아이다.
+	shelter._do_swap()
+	_check("바꿔도 식구 수가 그대로다", game.collection.size() == whole,
+		"%d / %d" % [game.collection.size(), whole])
+	_check("바꿔도 집은 정원 그대로다", game.home_members().size() == game.seats(),
+		"%d / %d" % [game.home_members().size(), game.seats()])
+	_check("바꿔도 쉼터 인원이 그대로다", game.shelter_members().size() == waiting,
+		"%d / %d" % [game.shelter_members().size(), waiting])
+
+	shelter.queue_free()
+	await process_frame
+	for key in kept:
+		game.set(key, kept[key])
+
+	# --- 저장에 남는다 ------------------------------------------------------
+	var saved := {"version": 1, "collection": deep.collection, "seen": deep.seen,
+		"paired": deep.paired, "coins": 77, "bought_seats": 2, "party": []}
+	var reloaded := GameState.new()
+	reloaded.autosave = false
+	reloaded._adopt(saved)
+	_check("어디서 지내는지가 저장에 남는다",
+		reloaded.shelter_members().size() == deep.shelter_members().size(),
+		"%d / %d" % [reloaded.shelter_members().size(), deep.shelter_members().size()])
+	_check("재화가 저장에 남는다", reloaded.coins == 77, str(reloaded.coins))
+	_check("넓힌 자리가 저장에 남는다", reloaded.bought_seats == 2, str(reloaded.bought_seats))
+	# 옛 저장에는 `at` 이 없다 — 없으면 집이다
+	var old_save := {"version": 1, "collection": [{"uid": 1, "species_id": "dog", "sex": "male"}],
+		"seen": ["dog"], "paired": [], "party": []}
+	var migrated := GameState.new()
+	migrated.autosave = false
+	migrated._adopt(old_save)
+	_check("옛 저장의 아이는 집에 있다", migrated.home_members().size() == 1,
+		"%d" % migrated.home_members().size())

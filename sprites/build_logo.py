@@ -20,11 +20,13 @@ OUT = os.path.dirname(os.path.abspath(__file__))
 W, H = 640, 360                      # project.godot 의 뷰포트와 같아야 한다
 
 BG      = (14, 15, 19)               # 순검정이 아니다 — 외곽선이 살아야 한다
-INK     = (236, 230, 216)
-INK_LO  = (170, 160, 142)            # 아랫변 1px — 위가 밝다 (§4.4 를 글자에도)
-INK_OL  = (8, 8, 10)
-PAW     = (92, 84, 74)               # 어른 발자국
-PAW_LIT = (128, 118, 102)            # 아이 발자국 — 조금 더 밝게 해야 눈이 따라간다
+INK     = (246, 232, 202)            # 종이·나무의 따뜻한 밝은 면
+INK_LO  = (202, 148, 82)             # 아랫변 1px — 타이틀과 같은 호박빛 그림자
+INK_OL  = (36, 26, 20)
+PAW     = (120, 101, 76)             # 어른 발자국
+PAW_SHA = (56, 45, 36)               # 1px 아래 그림자 — 검은 배경에서도 패드가 뭉개지지 않는다
+PAW_LIT = (211, 171, 96)             # 아이 발자국 — 따뜻한 금빛
+PAW_LIT_SHA = (106, 76, 47)
 
 
 # ── 글자 — 14×18 격자, 획 3px ────────────────────────────────────────
@@ -78,9 +80,33 @@ def glyph_I():
     return m
 
 
-def wordmark(scale=2):
-    """RUN II — 정수배로만 키운다. 글자 사이 간격도 설계 격자에서 잡는다.
-    RUN 과 II 사이는 한 글자 폭만큼 벌린다. 붙이면 'RUNII' 한 단어로 읽힌다."""
+# 본문보다 한 단계 작고 얇은 보조 글자. `RUN II`가 게임 메뉴처럼 보이지 않게
+# 스튜디오 표기를 붙인다. 폰트를 불러오지 않고도 로고의 픽셀 밀도를 유지한다.
+MICRO = {
+    "S": ("111", "100", "111", "001", "111"),
+    "T": ("111", "010", "010", "010", "010"),
+    "U": ("101", "101", "101", "101", "111"),
+    "D": ("110", "101", "101", "101", "110"),
+    "I": ("111", "010", "010", "010", "111"),
+    "O": ("111", "101", "101", "101", "111"),
+}
+
+def micro_word(text):
+    """1px 획의 `STUDIO`. ×2 뒤에도 주 워드마크보다 조용해야 한다."""
+    chars = [MICRO[ch] for ch in text]
+    w = len(chars) * 4 - 1
+    m = _mask(w, 5); px = m.load()
+    for n, glyph in enumerate(chars):
+        for y, row in enumerate(glyph):
+            for x, bit in enumerate(row):
+                if bit == "1": px[n * 4 + x, y] = 255
+    im = Image.new("RGBA", (w, 5), (0, 0, 0, 0))
+    im.paste(Image.new("RGBA", im.size, INK_LO + (255,)), (0, 0), m)
+    return im
+
+
+def _main_wordmark():
+    """RUN II 본문. mark·보조 글자를 조합하기 전의 원래 워드마크다."""
     parts, x = [], 0
     for g, adv in ((glyph_R(), GW+4), (glyph_U(), GW+4), (glyph_N(), NW+13),
                    (glyph_I(), IW+4), (glyph_I(), IW)):
@@ -107,7 +133,21 @@ def wordmark(scale=2):
         layer = Image.new("RGBA", im.size, (0, 0, 0, 0))
         layer.paste(Image.new("RGBA", (dw, dh), col + (255,)), (1, 1), msk)
         im.alpha_composite(layer)
+    return im
 
+
+def wordmark(scale=2):
+    """`RUN II STUDIO` — 발자국 마크·본문·보조 글자를 하나의 로고로 묶는다."""
+    main = _main_wordmark()
+    mark = brand_mark()
+    sub = micro_word("STUDIO")
+    gap = 5
+    w = mark.width + gap + main.width
+    h = max(mark.height, main.height + 2 + sub.height)
+    im = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    im.alpha_composite(mark, (0, (h - mark.height) // 2))
+    im.alpha_composite(main, (mark.width + gap, 0))
+    im.alpha_composite(sub, (mark.width + gap + (main.width - sub.width) // 2, main.height + 2))
     return im.resize((im.width*scale, im.height*scale), Image.NEAREST)
 
 
@@ -129,57 +169,83 @@ def _ascii(rows):
             if ch == "#": px[x, y] = 255
     return m
 
-PAW_BIG = lambda: _ascii([
-    ".....##..##.....",      # 가운데 발가락 둘이 앞으로 나온다
-    ".##..##..##..##.",
-    ".##..##..##..##.",
-    ".##..........##.",
+PAW_BIG_LEFT = lambda: _ascii([
+    "......##.##.....",      # 안쪽 두 발가락은 한 걸음 앞에 있다
+    "...##......##...",      # 바깥 발가락은 반 박자 뒤 — comb 모양을 피한다
+    "...##.......##..",
     "................",
-    "....########....",
-    "..############..",
-    ".##############.",
-    ".##############.",
-    "..############..",
-    "....########....",
+    "......######....",
+    "....##########..",
+    "...############.",
+    "....##########..",
+    "......######....",
 ])
 
-PAW_SMALL = lambda: _ascii([
-    "...##.##...",
-    "##.##.##.##",
-    "##.##.##.##",
-    "##.......##",
-    "...........",
-    "..#######..",
-    ".#########.",
-    ".#########.",
-    "..#######..",
+PAW_SMALL_LEFT = lambda: _ascii([
+    "....##.##...",
+    ".##.....##..",
+    ".##......##.",
+    "............",
+    "....#####...",
+    "..#########.",
+    ".##########.",
+    "..#########.",
+    "....#####...",
 ])
 
-def paw(big, scale=2):
-    m = (PAW_BIG if big else PAW_SMALL)()
-    im = Image.new("RGBA", m.size, (0, 0, 0, 0))
-    im.paste(Image.new("RGBA", m.size, ((PAW if big else PAW_LIT)) + (255,)), (0, 0), m)
-    return im.resize((m.width*scale, m.height*scale), Image.NEAREST)
+def _mirror(mask):
+    """왼·오른발은 대칭이지만 파일은 따로 내보낸다 — 변형 없이 픽셀 정렬이 유지된다."""
+    from PIL import ImageOps
+    return ImageOps.mirror(mask)
+
+def paw_mask(big, side="left"):
+    left = (PAW_BIG_LEFT if big else PAW_SMALL_LEFT)()
+    return left if side == "left" else _mirror(left)
+
+def paw(big, scale=2, side="left"):
+    """발가락·패드 사이를 보존한 1px 아래 그림자. 발자국이 아닌 열매처럼 보이지 않게 한다."""
+    m = paw_mask(big, side)
+    fill = PAW if big else PAW_LIT
+    shade = PAW_SHA if big else PAW_LIT_SHA
+    im = Image.new("RGBA", (m.width + 1, m.height + 1), (0, 0, 0, 0))
+    im.paste(Image.new("RGBA", m.size, shade + (255,)), (1, 1), m)
+    im.paste(Image.new("RGBA", m.size, fill + (255,)), (0, 0), m)
+    return im.resize((im.width*scale, im.height*scale), Image.NEAREST)
+
+def brand_mark():
+    """워드마크 왼쪽의 한 짝. 화면 아래의 궤적과 같은 물건이라 이름 없이도 동물 게임을 말한다."""
+    m = paw_mask(True, "left")
+    im = Image.new("RGBA", (m.width + 2, m.height + 2), (0, 0, 0, 0))
+    # 1px 테두리는 검은 배경에서만 쓰고, 발가락 틈은 건드리지 않는다.
+    for dx, dy in ((0, 1), (1, 0), (2, 1), (1, 2)):
+        im.paste(Image.new("RGBA", m.size, INK_OL + (255,)), (dx, dy), m)
+    im.paste(Image.new("RGBA", m.size, PAW_LIT + (255,)), (1, 1), m)
+    return im
 
 N_BIG, N_SMALL = 7, 5
 
 def _big_at(i):
-    """왼쪽 아래에서 오른쪽으로 올라가며 — 화면 밖에서 걸어 들어온다.
-    좌우로 번갈아 흔들려야 '걸어간 자국'으로 읽힌다. 일직선은 자국이 아니라 점선이다.
-    다만 흔들림이 보폭만큼 커지면 두 줄로 보인다 — 8px 면 충분하다."""
-    return 40 + i*78, 244 - i*6 + (0 if i % 2 else 8)
+    """큰 발은 왼쪽 아래에서 완만히 올라간다. 좌우 발 모양도 번갈아 진짜 걸음이 된다."""
+    return 32 + i*69, 252 - i*8 + (-2 if i % 2 else 6)
 
 def _small_at(i):
-    """아이 줄은 어른 줄 **아래**에 따로 흐른다. 보폭이 짧아 걸음 수가 더 잦다.
-    사이에 끼워 넣으면 두 줄이 한 줄로 뭉개져서 '나란히 걷는다'가 사라진다."""
-    return 196 + i*62, 300 - i*5 + (0 if i % 2 else 7)
+    """작은 발은 어른 발 아래를 더 짧게 따라간다. 두 궤적이 가까워지는 끝이 로고를 가리킨다."""
+    return 185 + i*53, 302 - i*7 + (-2 if i % 2 else 5)
+
+def _paw_entry(big, i):
+    side = "left" if i % 2 == 0 else "right"
+    stem = "logo_paw_big" if big else "logo_paw_small"
+    return {
+        "at": list(_big_at(i) if big else _small_at(i)),
+        "file": "ui/%s%s.png" % (stem, "" if side == "left" else "_right"),
+    }
 
 def footprints(n_big, n_small):
     im = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     for i in range(min(n_big, N_BIG)):
-        im.alpha_composite(paw(True), _big_at(i))
+        im.alpha_composite(paw(True, side="left" if i % 2 == 0 else "right"), _big_at(i))
     for i in range(min(n_small, N_SMALL)):
-        im.alpha_composite(paw(False), _small_at(i))
+        im.alpha_composite(paw(False, side="left" if i % 2 == 0 else "right"), _small_at(i))
     return im
 
 
@@ -230,8 +296,10 @@ def save_all():
     wm = wordmark()
     wm.save(os.path.join(d, "logo_wordmark.png"))
     screen().save(os.path.join(d, "logo_screen.png"))
-    paw(True).save(os.path.join(d, "logo_paw_big.png"))
-    paw(False).save(os.path.join(d, "logo_paw_small.png"))
+    paw(True, side="left").save(os.path.join(d, "logo_paw_big.png"))
+    paw(True, side="right").save(os.path.join(d, "logo_paw_big_right.png"))
+    paw(False, side="left").save(os.path.join(d, "logo_paw_small.png"))
+    paw(False, side="right").save(os.path.join(d, "logo_paw_small_right.png"))
 
     meta = {
         "_comment": "제작사 로고 부팅 화면. 좌표는 스프라이트의 좌상단 기준, 캔버스 640×360.",
@@ -241,8 +309,8 @@ def save_all():
         "wordmark_at": [(W - wm.width)//2, MARK_AT],
         "paw_big": "ui/logo_paw_big.png",
         "paw_small": "ui/logo_paw_small.png",
-        "big":   [list(_big_at(i))   for i in range(N_BIG)],
-        "small": [list(_small_at(i)) for i in range(N_SMALL)],
+        "big":   [_paw_entry(True, i)  for i in range(N_BIG)],
+        "small": [_paw_entry(False, i) for i in range(N_SMALL)],
         "timing": {
             "frames": FRAMES, "frame_ms": FRAME_MS,
             "big_from": BIG_FROM, "big_every": BIG_EVERY,
@@ -254,7 +322,7 @@ def save_all():
     with open(os.path.join(d, "logo.json"), "w") as fp:
         json.dump(meta, fp, ensure_ascii=False, indent=2)
     print("extracted/ui/logo_wordmark.png · logo_screen.png · "
-          "logo_paw_big.png · logo_paw_small.png · logo.json")
+          "logo_paw_big{,_right}.png · logo_paw_small{,_right}.png · logo.json")
 
 
 def sheet():

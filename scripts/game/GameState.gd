@@ -32,7 +32,7 @@ const PARTY_MAX := 2
 ##   플레이어가 확률 쪽을 골랐으므로 그렇게 두고, 설계 세션에 그 절을 넘겼다.
 const PAIR_CHANCE := 0.10
 ## 처음 사파리에 있는 자리.
-const SEATS_BASE := 4
+const SEATS_BASE := 10
 ## **새 종을 만날수록 자리가 늘어난다** (BRIEF §2.4). 자리가 꽉 찬 뒤에도 원정이
 ## 보상을 줘야 하기 때문이다 — 새 아이가 다 쉼터로 가면 나갈 이유가 약해진다.
 ##
@@ -189,12 +189,35 @@ func add(species_id: String, sex := "") -> Dictionary:
 
 
 ## 이 종이 짝을 이뤘는가.
-func is_paired(species_id: String) -> bool:
-	return species_id in paired
+## 이 **개체**에게 짝이 있는가.
+##
+## ★ 예전엔 짝이 **종**에 붙어 있었다. 그러면 청설모 한 쌍이 맺어진 순간 마당의
+##   청설모 세 마리가 전부 하트를 달고, 이미 맺어진 아이가 다음 원정에서 또 굴려졌다
+##   (사용자 지적 — "3마리 청설모가 하트가 생겼어"). 짝은 **두 아이 사이의 일**이다.
+func is_paired(uid: int) -> bool:
+	return partner_of(uid) >= 0
 
 
-## 원정에서 돌아왔다. 암수가 다 있는 종마다 한 번씩 굴린다.
-## 새로 짝이 된 종 이름들을 돌려준다 — 화면이 그 사건을 보여줘야 하기 때문이다.
+## 이 아이의 짝. 없으면 -1.
+func partner_of(uid: int) -> int:
+	for couple in paired:
+		if int(couple[0]) == uid:
+			return int(couple[1])
+		if int(couple[1]) == uid:
+			return int(couple[0])
+	return -1
+
+
+## 이 종에 맺어진 쌍이 하나라도 있는가. 지도의 하트 핀처럼 **종 단위로 묻는 화면**용이다.
+func species_has_pair(species_id: String) -> bool:
+	for couple in paired:
+		if String(of_uid(int(couple[0])).get("species_id", "")) == species_id:
+			return true
+	return false
+
+
+## 원정에서 돌아왔다. **짝 없는 암수가 다 있는 종마다** 한 번씩 굴린다.
+## 새로 맺어진 쌍(개체 두 마리)을 돌려준다 — 화면이 그 사건을 보여줘야 하기 때문이다.
 func roll_pairs() -> Array:
 	# ⚠️ **종마다 한 번**이다. 개체를 돌면 암수 두 마리가 각각 굴려서 확률이 두 배가 된다
 	#    — 재보니 0.35 가 0.58 로 뛰었다.
@@ -205,14 +228,24 @@ func roll_pairs() -> Array:
 			kinds.append(id)
 	var made: Array = []
 	for id in kinds:
-		if id in paired:
-			continue
-		if sexes_of(id).size() < 2:
+		# ★ **이미 짝이 있는 아이는 후보가 아니다.** 기혼자를 다시 굴리면
+		#   한 아이가 여러 짝을 갖는다.
+		var single_males: Array = []
+		var single_females: Array = []
+		for one in collection:
+			if String(one["species_id"]) != id or is_paired(int(one["uid"])):
+				continue
+			if String(one["sex"]) == "male":
+				single_males.append(int(one["uid"]))
+			elif String(one["sex"]) == "female":
+				single_females.append(int(one["uid"]))
+		if single_males.is_empty() or single_females.is_empty():
 			continue
 		if _rng.randf() < (PAIR_CHANCE_OVERRIDE if PAIR_CHANCE_OVERRIDE > 0.0 else PAIR_CHANCE):
-			made.append(id)
-	for id in made:
-		paired.append(id)
+			var couple := [single_males[_rng.randi() % single_males.size()],
+				single_females[_rng.randi() % single_females.size()]]
+			paired.append(couple)
+			made.append(couple)
 	if not made.is_empty():
 		save_game()
 	return made
@@ -339,6 +372,27 @@ func _adopt(parsed: Dictionary) -> void:
 	_next_uid = int(parsed.get("next_uid", collection.size() + 1))
 	tutorial_done = bool(parsed.get("tutorial_done", false))
 	paired = parsed.get("paired", [])
+	# ⚠️ 옛 저장의 `paired` 는 **종 이름 목록**이었다. 그대로 두면 한 종의 모든 개체가
+	#    짝으로 읽힌다 — 그 종의 암수 한 마리씩을 골라 진짜 쌍으로 옮긴다.
+	var moved: Array = []
+	for entry in paired:
+		if entry is Array:
+			moved.append([int(entry[0]), int(entry[1])])
+			continue
+		var male := -1
+		var female := -1
+		for one in collection:
+			if String(one.get("species_id", "")) != String(entry):
+				continue
+			var uid := int(one["uid"])
+			if String(one["sex"]) == "male" and male < 0:
+				male = uid
+			elif String(one["sex"]) == "female" and female < 0:
+				female = uid
+		if male >= 0 and female >= 0:
+			moved.append([male, female])
+		_repaired = true
+	paired = moved
 	coins = int(parsed.get("coins", 120))
 	bought_seats = int(parsed.get("bought_seats", 0))
 	for one in collection:

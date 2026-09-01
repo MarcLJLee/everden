@@ -7,7 +7,7 @@
 extends SceneTree
 
 ## 이 아래로 떨어지면 어딘가에서 판정이 조용히 끊긴 것이다.
-const FLOOR := 481
+const FLOOR := 495
 
 var _pass := 0
 var _fail := 0
@@ -66,6 +66,7 @@ func _run() -> void:
 	await _test_eyeshine(field)
 	await _test_puff(field)
 	await _test_invite(field)
+	await _test_follow(field)
 	await _test_seats(game)
 
 	# ⚠️ 판정 하나가 터지면 그 함수의 **나머지가 통째로 안 돈다.** 실패가 아니라
@@ -1723,7 +1724,10 @@ func _test_weather(field, game) -> void:
 	var lead_dog: Actor = _find_companion(field, "dog")
 	var lead_cat: Actor = _find_companion(field, "cat")
 	var smelly_one := _find_animal(field, "raccoon_dog")
-	field.player.position = _find_terrain_point(field, "초원")
+	# ⚠️ **사방이 트인 자리에 세운다.** 초원 타일 하나만 보고 세웠더니 판마다
+	#    물·바위가 코앞인 자리가 걸렸고, 그러면 동료가 벽을 밀며 영영 걷는다 —
+	#    "가끔은 선다" 와 "잡은 쪽으로 간다" 가 같이 깜빡인 이유가 이것이다.
+	field.player.position = _find_open_spot(field, 5)
 	lead_dog.position = field.player.position
 	lead_cat.position = field.player.position
 	var leash: float = field.tuning.lead_leash * field.tuning.tile_size
@@ -1829,7 +1833,7 @@ func _test_weather(field, game) -> void:
 		await process_frame
 	_check("잡은 게 없으면 곁으로 돌아온다",
 		lead_dog.position.distance_to(field.player.position)
-			< field.tuning.follow_distance * field.tuning.tile_size + 24.0,
+			< field.tuning.companion_roam * field.tuning.tile_size + 4.0,
 		"%.0fpx" % lead_dog.position.distance_to(field.player.position))
 	_check("곁에 있을 때는 안 흔든다", not lead_dog.play_special)
 
@@ -2017,13 +2021,13 @@ func _test_weather(field, game) -> void:
 
 	# ★ **암수를 다 데려왔다고 바로 짝이 아니다** (사용자 지적). 원정에서 돌아올 때
 	#   종마다 한 번씩 굴린다. 짝이 되어 아기가 생기는 것은 일종의 행운이다.
-	_check("암수가 다 있어도 처음엔 짝이 아니다", not yard_state.is_paired("otter"))
+	_check("암수가 다 있어도 처음엔 짝이 아니다", not yard_state.species_has_pair("otter"))
 	var returns := 0
-	while not yard_state.is_paired("otter") and returns < 300:
+	while not yard_state.species_has_pair("otter") and returns < 300:
 		yard_state.roll_pairs()
 		returns += 1
 	# ⚠️ **문이 닫히지 않는다**(원칙 2). 안 된 날은 "아직" 일 뿐 다음 귀가에 다시 굴린다.
-	_check("여러 번 돌아오면 언젠가는 된다", yard_state.is_paired("otter"),
+	_check("여러 번 돌아오면 언젠가는 된다", yard_state.species_has_pair("otter"),
 		"귀가 %d 번" % returns)
 	_check("한 번에 되지도, 영영 안 되지도 않는다", returns >= 1 and returns < 200,
 		"귀가 %d 번" % returns)
@@ -2036,7 +2040,7 @@ func _test_weather(field, game) -> void:
 		trial.add("otter", "male")
 		trial.add("otter", "female")
 		var n := 0
-		while not trial.is_paired("otter") and n < 200:
+		while not trial.species_has_pair("otter") and n < 200:
 			trial.roll_pairs()
 			n += 1
 		pace += n
@@ -2053,8 +2057,11 @@ func _test_weather(field, game) -> void:
 	per_species.add("otter", "male")
 	per_species.add("otter", "female")
 	per_species.add("cat", "male")
-	_check("한 번 굴리면 짝이 될 종만 된다", per_species.roll_pairs() == ["otter"],
-		"%s" % [per_species.roll_pairs()])
+	var one_roll: Array = per_species.roll_pairs()
+	_check("한 번 굴리면 짝이 될 종만 된다",
+		one_roll.size() == 1 and per_species.species_has_pair("otter")
+			and not per_species.species_has_pair("cat"),
+		"%s" % [one_roll])
 	# 혼자면 아무리 돌아와도 안 된다 — 그건 지도 핀이 풀 몫이다
 	var lone := GameState.new()
 	lone.autosave = false
@@ -2062,7 +2069,7 @@ func _test_weather(field, game) -> void:
 	lone.add("otter", "male")
 	for i in 40:
 		lone.roll_pairs()
-	_check("혼자면 짝이 안 된다 — 그건 지도가 풀 몫이다", not lone.is_paired("otter"))
+	_check("혼자면 짝이 안 된다 — 그건 지도가 풀 몫이다", not lone.species_has_pair("otter"))
 	_check("대신 지도가 어느 성별을 찾을지 말한다",
 		String(lone.lonely_species().get("otter", "")) == "female")
 	# 새로 짝이 된 종은 화면이 한 번 말해 준다 — 확률이 아니라 **일어난 일**을 적는다
@@ -2076,8 +2083,70 @@ func _test_weather(field, game) -> void:
 		told = telling.roll_pairs()
 		if not told.is_empty():
 			break
-	_check("짝이 된 순간을 알려줄 이름이 나온다", told == ["otter"], "%s" % [told])
-	_check("이미 된 종은 다시 안 알린다", telling.roll_pairs().is_empty())
+	_check("짝이 된 순간을 알려줄 두 아이가 나온다",
+		told.size() == 1 and told[0].size() == 2, "%s" % [told])
+	_check("이미 된 아이는 다시 안 알린다", telling.roll_pairs().is_empty())
+
+	# ★ **짝은 종이 아니라 개체에 붙는다** (사용자 지적 — "3마리 청설모가 하트가 생겼어").
+	#   종에 붙여 뒀더니 한 쌍이 맺어진 순간 마당의 같은 종 전부가 하트를 달았고,
+	#   이미 맺어진 아이가 다음 원정에서 또 굴려졌다.
+	var trio_state := GameState.new()
+	trio_state.autosave = false
+	trio_state.start_new()
+	trio_state.PAIR_CHANCE_OVERRIDE = 1.0
+	var trio := [trio_state.add("squirrel", "male"), trio_state.add("squirrel", "female"),
+		trio_state.add("squirrel", "male")]
+	trio_state.roll_pairs()
+	var wearing := 0
+	for one in trio:
+		if trio_state.is_paired(int(one["uid"])):
+			wearing += 1
+	_check("세 마리 중 두 마리만 짝이 된다", wearing == 2, "%d 마리" % wearing)
+	# 어느 수컷이 뽑힐지는 무작위다 — **맺어진 쌍 자체**를 본다
+	var made_pair: Array = trio_state.paired[0]
+	_check("맺어진 둘은 서로의 짝이다",
+		trio_state.partner_of(int(made_pair[0])) == int(made_pair[1])
+			and trio_state.partner_of(int(made_pair[1])) == int(made_pair[0]),
+		"%s" % [made_pair])
+	_check("맺어진 둘은 암수 한 쌍이다",
+		String(trio_state.of_uid(int(made_pair[0]))["sex"])
+			!= String(trio_state.of_uid(int(made_pair[1]))["sex"]))
+	# ★ **기혼자는 다시 안 굴려진다.** 한 아이가 여러 짝을 갖는 일이 없다.
+	for i in 20:
+		trio_state.roll_pairs()
+	var couples := trio_state.paired.size()
+	_check("남은 한 마리는 짝이 없다 — 상대가 없기 때문이다", couples == 1,
+		"쌍 %d" % couples)
+	var pair_seen_uids := {}
+	var pair_reused := false
+	for couple in trio_state.paired:
+		for uid in couple:
+			if pair_seen_uids.has(int(uid)):
+				pair_reused = true
+			pair_seen_uids[int(uid)] = true
+	_check("한 아이가 두 짝을 갖지 않는다", not pair_reused)
+	# 짝 없는 암수가 더 생기면 그 둘은 맺어질 수 있다 — 문이 닫히지 않는다 (원칙 2)
+	trio_state.add("squirrel", "female")
+	for i in 20:
+		trio_state.roll_pairs()
+	_check("새로 온 아이는 남은 아이와 맺어질 수 있다", trio_state.paired.size() == 2,
+		"쌍 %d" % trio_state.paired.size())
+
+	# 옛 저장은 `paired` 에 **종 이름**을 들고 있었다 — 진짜 쌍으로 옮겨 받는다
+	var old_pairs := GameState.new()
+	old_pairs.autosave = false
+	old_pairs._adopt({"version": 1, "next_uid": 4, "seen": ["otter"], "party": [],
+		"collection": [
+			{"uid": 1, "species_id": "otter", "sex": "male", "at": "home"},
+			{"uid": 2, "species_id": "otter", "sex": "female", "at": "home"},
+			{"uid": 3, "species_id": "otter", "sex": "male", "at": "home"}],
+		"paired": ["otter"]})
+	var old_wearing := 0
+	for uid in [1, 2, 3]:
+		if old_pairs.is_paired(uid):
+			old_wearing += 1
+	_check("옛 저장의 종 단위 짝이 두 마리짜리 쌍으로 옮겨진다", old_wearing == 2,
+		"%d 마리 · %s" % [old_wearing, old_pairs.paired])
 
 	# ★ **새 판은 세이브를 쓰지 않는다.** 지우고 켜면 오토로드가 곧바로 빈 파일을 써서
 	#   새 판인데 CONTINUE 가 떴다 (사용자 지적). 파일은 **처음 친구가 생길 때** 생긴다.
@@ -2518,6 +2587,33 @@ func _puff_near(field, position: Vector2, hiding: bool) -> bool:
 	return false
 
 
+## 반지름 `tiles` 안이 전부 설 수 있는 자리. 동료가 뛰어다녀도 벽을 안 미는 곳이다.
+## 못 찾으면 한가운데를 돌려준다 — 판정이 조용히 사라지는 것보다 낫다.
+func _find_open_spot(field, tiles: int) -> Vector2:
+	var size: Vector2i = field.terrain.size
+	var best: Vector2 = field._bounds.size * 0.5
+	for tile_y in range(tiles, size.y - tiles):
+		for tile_x in range(tiles, size.x - tiles):
+			var open := true
+			for dy in range(-tiles, tiles + 1):
+				for dx in range(-tiles, tiles + 1):
+					if not field.terrain.can_stand(
+							Vector2((tile_x + dx) * field.tuning.tile_size,
+								(tile_y + dy) * field.tuning.tile_size),
+							field.schema, []):
+						open = false
+						break
+				if not open:
+					break
+			if open:
+				return Vector2(tile_x, tile_y) * field.tuning.tile_size
+	# ⚠️ 못 찾았다고 아무 데나 세우지 않는다 — 물가 한복판에 서면 그 판의 판정이
+	#    통째로 헛돈다. 반경을 줄여 다시 찾고, 그래도 없으면 설 수 있는 자리로 민다.
+	if tiles > 2:
+		return _find_open_spot(field, tiles - 2)
+	return field.terrain.nearest_standing(best, field.schema, [])
+
+
 func _find_terrain_point(field, terrain_name: String) -> Vector2:
 	var map: TerrainMap = field.terrain
 	var center := Vector2(map.size) * 0.5
@@ -2610,7 +2706,9 @@ func _test_seats(game: GameState) -> void:
 	var deep := GameState.new()
 	deep.autosave = false
 	deep.start_new()
-	for i in 3:
+	# ⚠️ 마릿수를 박아 두지 않는다 — 기본 자리를 바꾸면 이 아래가 통째로 헛돈다.
+	#    **넘칠 때까지** 모은다.
+	while deep.shelter_members().is_empty() and deep.collection.size() < 60:
 		deep.add("dog")
 		deep.add("cat")
 	_check("같은 종을 여럿 모으면 자리가 모자라진다",
@@ -2772,3 +2870,117 @@ func _test_seats(game: GameState) -> void:
 	migrated._adopt(old_save)
 	_check("옛 저장의 아이는 집에 있다", migrated.home_members().size() == 1,
 		"%d" % migrated.home_members().size())
+
+
+## 따라오는 모양 (사용자 지적)
+##
+## ★ **개는 주인공에게 붙어 다니지 않는다.** 자기가 가고 싶은 데로 가되 곁을
+##   벗어나지 않으려 한다. 예전엔 목표가 `주인공 + 고정 오프셋`이라, 주인공이
+##   움직이는 순간 모든 목표가 똑같이 밀려서 한 덩어리로 미끄러졌다.
+func _test_follow(field) -> void:
+	field.set_process(false)
+	var dog: Actor = _find_companion(field, "dog")
+	var cat: Actor = _find_companion(field, "cat")
+	# 잡은 것이 있으면 lead_goal 이 배회를 덮는다 — 따라오는 모양만 본다
+	var was_present := {}
+	for animal in field.sim.animals:
+		was_present[animal] = animal.present
+		animal.present = false
+	field.guide.update([], [])
+
+	var comfort: float = field.tuning.companion_roam * field.tuning.tile_size
+	field.player.position = _find_open_spot(field, 7)
+	dog.position = field.player.position
+	cat.position = field.player.position
+	field._strolls.clear()
+
+	# --- 주인공이 서 있을 때 ------------------------------------------------
+	var idle_spots := {}
+	for step in 900:
+		field.player.move_vector = Vector2.ZERO
+		field._follow_player(1.0 / 60.0)
+		await process_frame
+		idle_spots[Vector2i(dog.position.round())] = true
+	_check("주인공이 서 있어도 제 볼일을 본다", idle_spots.size() > 10,
+		"%d 곳" % idle_spots.size())
+
+	# --- 주인공이 걷기 시작하면 --------------------------------------------
+	# ★ **한 덩어리인지는 방향이 아니라 상대 위치로 잰다.** 예전 모델에서는
+	#   `주인공 - 동료` 가 상수였다 — 그게 붙어 다니는 것의 정의다. 둘 다 주인공을
+	#   쫓아가느라 같은 쪽을 보는 프레임은 자연스러운 것이지 붙은 게 아니다.
+	var offsets: Array[Vector2] = []
+	var gaps: Array[float] = []
+	var own_way := 0
+	var moving := 0
+	var farthest := 0.0
+	for step in 1500:
+		# ⚠️ **멈췄다 가는 걸음으로 잰다.** 쉬지 않고 걸으면 동료는 내내 쫓아오는 게
+		#    맞고, 그걸 "딸려간다" 고 하면 판정이 자연스러운 행동을 막는다.
+		field.player.move_vector = Vector2.RIGHT if (step / 90) % 3 == 0 else Vector2.ZERO
+		field._follow_player(1.0 / 60.0)
+		await process_frame
+		farthest = maxf(farthest, dog.position.distance_to(field.player.position))
+		farthest = maxf(farthest, cat.position.distance_to(field.player.position))
+		# ★ **주인공이 쉴 때 무엇을 하는가**로 잰다. 걷는 동안 쫓아오는 것은
+		#   "딸려간다" 가 아니라 **곁에 오려고 애쓰는 것**이고, 그게 설계다.
+		if field.player.move_vector == Vector2.ZERO and dog.move_vector.length() > 0.05:
+			moving += 1
+			if dog.move_vector.normalized().dot(Vector2.RIGHT) < 0.8:
+				own_way += 1
+		offsets.append(dog.position - field.player.position)
+		gaps.append(dog.position.distance_to(cat.position))
+
+	# ★ **딸려가지 않는다.** 주인공이 오른쪽으로만 걸어도 동료는 제 방향이 있다.
+	_check("쉴 때 무엇을 하는지 볼 만큼은 걸었다", moving >= 40, "%d 프레임" % moving)
+	_check("주인공이 쉴 때는 제 방향으로 간다",
+		float(own_way) / maxf(float(moving), 1.0) > 0.12,
+		"쉴 때 걷는 %d 프레임 중 %d 이 제 방향 (%.0f%%)"
+		% [moving, own_way, float(own_way) / maxf(float(moving), 1.0) * 100.0])
+	# ★ **주인공에 대한 자리가 굳어 있지 않다.** 예전엔 오프셋이 상수라 화면에서
+	#   대형을 유지한 채 통째로 미끄러졌다.
+	var near_off := offsets[0]
+	var far_off := offsets[0]
+	for one in offsets:
+		if one.length() < near_off.length():
+			near_off = one
+		if one.length() > far_off.length():
+			far_off = one
+	_check("주인공에 대한 자리가 굳어 있지 않다",
+		far_off.length() - near_off.length() > field.tuning.tile_size,
+		"%.0f~%.0fpx" % [near_off.length(), far_off.length()])
+	# 둘 사이 간격도 변한다 — 대형이 아니다
+	var gap_min: float = gaps[0]
+	var gap_max: float = gaps[0]
+	for one in gaps:
+		gap_min = minf(gap_min, one)
+		gap_max = maxf(gap_max, one)
+	_check("둘 사이 간격도 계속 바뀐다", gap_max - gap_min > field.tuning.tile_size,
+		"%.0f~%.0fpx" % [gap_min, gap_max])
+	# ★ 그래도 **곁을 벗어나지 않는다.** 유도를 하려면 보이는 데 있어야 한다.
+	_check("걷는 내내 곁에 있다", farthest < comfort + field.tuning.tile_size * 1.5,
+		"가장 멀어졌을 때 %.0fpx (편한 거리 %.0fpx)" % [farthest, comfort])
+
+	# --- 떼어 놓으면 스스로 온다 -------------------------------------------
+	field.player.move_vector = Vector2.ZERO
+	dog.position = field.terrain.nearest_standing(
+		field.player.position + Vector2(comfort * 2.4, 0.0), field.schema, dog.habitat)
+	field._strolls.erase(dog)
+	var was_apart := dog.position.distance_to(field.player.position)
+	for step in 900:
+		field._follow_player(1.0 / 60.0)
+		await process_frame
+	# ★ 붙잡아 두는 게 아니라 **스스로 돌아온다.** 가까워졌는지가 아니라
+	#   **편한 거리 안으로 들어왔는지**를 본다 — 그게 규칙이다.
+	_check("멀어지면 스스로 편한 거리 안으로 돌아온다",
+		dog.position.distance_to(field.player.position) <= comfort + field.tuning.tile_size,
+		"%.0fpx → %.0fpx (편한 거리 %.0fpx)"
+		% [was_apart, dog.position.distance_to(field.player.position), comfort])
+
+	for animal in was_present:
+		animal.present = bool(was_present[animal])
+	field.player.move_vector = Vector2.ZERO
+	field.player.position = field._bounds.size * 0.5
+	for companion in field.companions:
+		companion.position = field.player.position
+	field._strolls.clear()
+	field.set_process(true)

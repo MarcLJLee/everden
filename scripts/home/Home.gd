@@ -137,15 +137,16 @@ func _object_slots(count: int) -> Array:
 func _mark_new_couples(species_by_id: Dictionary) -> void:
 	if Game.rolled_pairs.is_empty():
 		return
-	for id in Game.rolled_pairs:
+	for couple_uids in Game.rolled_pairs:
+		# ★ 맺어진 **그 두 아이**를 세운다. 종에서 아무나 둘 고르면 하트가 엉뚱한
+		#   아이 위에 뜬다 — 짝은 개체 사이의 일이다.
 		var couple: Array = []
 		for resident in residents:
-			if resident.actor.species_id == String(id):
+			if resident.uid in [int(couple_uids[0]), int(couple_uids[1])]:
 				couple.append(resident)
 		if couple.size() < 2:
 			continue
 		# 마주 서게 한다 — 오른쪽 아이가 왼쪽을 본다
-		couple[0].actor.position = couple[0].actor.position
 		couple[1].actor.position = couple[0].actor.position + Vector2(26, 0)
 		couple[0].actor.look_direction = Vector2.RIGHT
 		couple[1].actor.look_direction = Vector2.LEFT
@@ -172,14 +173,15 @@ func _mark_new_couples(species_by_id: Dictionary) -> void:
 			+ Vector2(-heart.texture.get_width() * 0.5, -34)
 		mark.z_index = 5
 		_world.add_child(mark)
-		_waiting.append({"id": String(id), "mark": mark,
+		_waiting.append({"uids": [couple[0].uid, couple[1].uid], "mark": mark,
 			"at": (couple[0].actor.position + couple[1].actor.position) * 0.5})
 	Game.rolled_pairs = []
 
 
 func _celebrating(resident) -> bool:
 	for wait in _waiting:
-		if resident.actor.species_id == String(wait["id"]):
+		# 축하를 기다리는 것은 **그 두 아이**지 같은 종 전부가 아니다
+		if resident.uid in wait["uids"]:
 			return true
 	return false
 
@@ -193,11 +195,15 @@ func _check_couple_visit() -> void:
 		if player.position.distance_to(Vector2(wait["at"])) > tuning.interact_radius \
 				* tuning.tile_size * 2.0:
 			continue
-		var id := String(wait["id"])
+		# 맺어진 **그 두 아이**의 카드다
 		var pair: Array = []
-		for one in Game.collection:
-			if String(one["species_id"]) == id:
+		for uid in wait["uids"]:
+			var one := Game.of_uid(int(uid))
+			if not one.is_empty():
 				pair.append(one)
+		if pair.size() < 2:
+			continue
+		var id := String(pair[0]["species_id"])
 		_couple.show_for(_species_by_id.get(id, {}), pair, residents.size(), Game.seats(), schema)
 		(wait["mark"] as Node2D).queue_free()
 		_waiting.remove_at(i)
@@ -227,6 +233,7 @@ func _spawn_residents(species_by_id: Dictionary, view: FieldTuning) -> void:
 			_rng.randf_range(yard.yard.position.x + 24, yard.yard.end.x - 24),
 			_rng.randf_range(yard.yard.position.y + 12, yard.yard.end.y - 12))
 		var resident := Resident.new()
+		resident.uid = int(one["uid"])
 		resident.actor = actor
 		resident.tags = Resident.tags_of(species)
 		residents.append(resident)
@@ -247,7 +254,9 @@ func _spawn_residents(species_by_id: Dictionary, view: FieldTuning) -> void:
 func _show_pair_marks() -> void:
 	for resident in residents:
 		# ⚠️ 암수가 다 있다고 바로 짝이 아니다 — 원정에서 돌아올 때 굴린다 (사용자 지적).
-		var paired: bool = Game.is_paired(resident.actor.species_id)
+		# ⚠️ **개체로 묻는다.** 종으로 물었더니 청설모 한 쌍이 맺어진 순간 마당의
+		#    청설모 세 마리가 전부 하트를 달았다 (사용자 지적).
+		var paired: bool = Game.is_paired(resident.uid)
 		var heart := Sprite2D.new()
 		heart.texture = SpriteLibrary.pair_ui_texture("paired") if paired else null
 		heart.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST

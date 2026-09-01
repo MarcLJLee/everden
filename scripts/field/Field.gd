@@ -55,6 +55,7 @@ var _props: Array = []
 var _region_name := ""
 ## 동료마다의 어슬렁 목표. 잡은 게 없을 때 곁에서 조금씩 돌아다닌다.
 var _strolls := {}
+
 var _last_weather_name := ""
 ## 지금 원정 중인 지역. 세계 지도가 생기면 거기서 정해진다 (BRIEF §3.9).
 @export var region_id := "home_hills"
@@ -296,22 +297,24 @@ func _active_companions() -> Array:
 ##   안 그러면 개가 혼자 화면 밖으로 달려가고, 그건 유도가 아니라 이별이다.
 func _follow_player(delta: float) -> void:
 	var active := _active_companions()
-	var leash := tuning.lead_leash * tuning.tile_size
 	for index in active.size():
 		var companion: Actor = active[index]
-		var lateral := tuning.tile_size * 0.9 * (1.0 if index % 2 == 0 else -1.0)
-		var goal := player.position + Vector2(lateral, tuning.follow_distance * tuning.tile_size)
-		# ★ **잡은 게 없으면 곁에서 어슬렁거린다** (사용자 지적).
-		#   자리에 딱 붙여 세웠더니 플레이어에게 들러붙은 것처럼 보였다 —
-		#   개는 따라오면서도 여기저기 코를 박는다. 그게 살아 있는 것으로 읽힌다.
-		goal += _stroll(companion, delta)
+		# ★ **개는 주인공에게 붙어 다니지 않는다** (사용자 지적). 자기가 가고 싶은
+		#   데로 가되 주인공 곁을 벗어나지 않으려 한다 — 그래서 목표는 **주인공 기준
+		#   좌표가 아니라 동물이 스스로 잡은 세계 좌표**다. 예전처럼 `주인공 + 오프셋`
+		#   으로 두면 주인공이 움직이는 순간 모든 목표가 똑같이 밀려서, 줄지어 오는 게
+		#   아니라 한 덩어리로 미끄러진다.
+		var goal := _wander(companion, delta)
 		goal = lead_goal(companion, goal)
 		var to_goal := goal - companion.position
 		var distance := to_goal.length()
 		# ⚠️ 목표가 가까우면 속도도 같이 줄어드는데, **바닥이 없으면 기어간다** —
 		#   곁에서 한 뼘 어슬렁거리는 데 몇 초가 걸려서 걷는 걸로 안 보인다.
+		# 아이마다 걸음이 조금 다르다 — 같은 속도로 가면 그것대로 한 덩어리다
+		var gait := 1.0 - 0.09 * index
 		companion.speed_tiles = clampf(distance / tuning.tile_size * 2.5,
-			tuning.move_speed * 0.45, tuning.move_speed * tuning.companion_speed_scale)
+			tuning.move_speed * 0.45,
+			tuning.move_speed * tuning.companion_speed_scale) * gait
 		# ⚠️ 한 걸음 안쪽이면 **딱 붙여 세운다.** 지나쳤다 돌아오기를 반복하면
 		#    줄 끝에서 부르르 떨고, 멈춰야 나오는 **꼬리 흔들기가 안 나온다**
 		#    (특징 동작은 서 있을 때만 재생된다).
@@ -335,15 +338,20 @@ func lead_goal(companion: Actor, resting: Vector2) -> Vector2:
 	return player.position + toward.normalized() * far
 
 
-## 곁에서의 어슬렁. 잡은 게 있으면 lead_goal 이 이 값을 덮어쓴다.
+
+## 이 동물이 지금 가고 싶은 **세계 좌표**. 잡은 게 있으면 lead_goal 이 덮어쓴다.
+##
+## ★ 두 가지가 섞여 있다 — **자기 볼일**과 **곁에 있고 싶은 마음**이다.
+##   평소엔 제 마음대로 목표를 잡고, 주인공에게서 편한 거리를 넘으면 그쪽으로 마음이
+##   기운다. 붙잡아 두는 게 아니라 **스스로 돌아온다**는 것이 차이다.
 ## ⚠️ 목표를 **가끔만** 바꾼다. 매 프레임 흔들면 걷는 게 아니라 떠는 것으로 보인다.
-func _stroll(companion: Actor, delta: float) -> Vector2:
+func _wander(companion: Actor, delta: float) -> Vector2:
 	var state: Dictionary = _strolls.get(companion,
-		{"at": Vector2.ZERO, "left": 0.0, "was": companion.position, "stuck": 0.0})
+		{"at": companion.position, "left": 0.0, "was": companion.position, "stuck": 0.0})
 	state["left"] = float(state["left"]) - delta
-	# ⚠️ 어슬렁 목표가 **갈 수 없는 자리**(물·바위)면 동료가 벽을 계속 민다.
-	#    나아가지 못하는 채로 걷고 있으면 목표를 새로 잡는다 — 안 그러면
-	#    영영 걷기만 하고 서지도, 꼬리를 흔들지도 않는다.
+	# ⚠️ 목표가 **갈 수 없는 자리**(물·바위)면 동물이 벽을 계속 민다. 나아가지 못하는
+	#    채로 걷고 있으면 목표를 새로 잡는다 — 안 그러면 영영 걷기만 하고 서지도,
+	#    꼬리를 흔들지도 않는다 (특징 동작은 서 있을 때만 재생된다).
 	if companion.move_vector.length() > 0.05 \
 			and companion.position.distance_to(Vector2(state["was"])) < 0.3:
 		state["stuck"] = float(state["stuck"]) + delta
@@ -353,18 +361,29 @@ func _stroll(companion: Actor, delta: float) -> Vector2:
 	else:
 		state["stuck"] = 0.0
 	state["was"] = companion.position
-	if float(state["left"]) <= 0.0:
-		state["left"] = _rng.randf_range(1.4, 3.2)
-		# 반쯤은 제자리에 선다 — 늘 움직이면 그것대로 부산하다
-		if _rng.randf() < 0.45:
-			state["at"] = Vector2.ZERO
+
+	# ★ **편한 거리를 넘으면 스스로 온다.** 유도를 하려면 어차피 주인공 곁에 있어야
+	#   보이므로, 이 반경이 곧 "따라온다" 는 인상을 만든다.
+	var comfort := tuning.companion_roam * tuning.tile_size
+	var apart := companion.position.distance_to(player.position)
+	if apart > comfort:
+		state["at"] = player.position \
+			+ (companion.position - player.position).normalized() * comfort * 0.45
+		state["left"] = maxf(float(state["left"]), 0.5)
+	elif float(state["left"]) <= 0.0:
+		state["left"] = _rng.randf_range(0.7, 2.4)
+		if _rng.randf() < 0.3:
+			# 가끔은 선다 — 늘 움직이면 그것대로 부산하다
+			state["at"] = companion.position
 		else:
-			# 갈 수 있는 자리만 고른다 — 못 가는 곳을 고르면 그리로 벽을 민다
-			for attempt in 6:
-				var pick := Vector2.from_angle(_rng.randf() * TAU) \
-					* _rng.randf_range(0.4, 1.3) * tuning.tile_size
+			# 자기 자리에서 뻗어 나간다. 주인공 곁을 벗어나는 쪽은 고르지 않는다.
+			for attempt in 8:
+				var pick: Vector2 = companion.position \
+					+ Vector2.from_angle(_rng.randf() * TAU) \
+					* _rng.randf_range(0.5, 1.8) * tuning.tile_size
 				state["at"] = pick
-				if terrain.can_stand(player.position + pick, schema, companion.habitat):
+				if pick.distance_to(player.position) <= comfort \
+						and terrain.can_stand(pick, schema, companion.habitat):
 					break
 	_strolls[companion] = state
 	return state["at"]

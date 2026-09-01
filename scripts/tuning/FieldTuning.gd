@@ -32,6 +32,11 @@ extends Resource
 @export var companion_speed_scale: float = 1.25
 ## 동료가 플레이어 뒤로 유지하려는 거리 (타일)
 @export var follow_distance: float = 1.4
+## 동료가 **제 볼일을 보며 벌어져도 되는 거리**(타일). 이걸 넘으면 스스로 돌아온다.
+##
+## ★ 유도용 줄(`lead_leash`)에서 빌려 쓰면 안 된다 — 그건 "잡은 것 쪽으로 얼마나
+##   앞장서도 되는가" 라 훨씬 길다. 빌려 썼더니 개가 반 화면 밖에서 어슬렁거렸다.
+@export var companion_roam: float = 2.4
 
 @export_group("반경 (타일)")
 ## 감각 없이 그냥 눈으로 확인되는 거리. 이것보다 멀면 몸이 안 보인다 — 그래야

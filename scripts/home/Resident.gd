@@ -13,6 +13,9 @@ const PLAY_MAX := 7.0
 const WANDER_MIN := 1.5
 const WANDER_MAX := 4.0
 
+## 이 아이의 개체 번호. **짝은 종이 아니라 개체에 붙는다** — 하트를 누구 머리 위에
+## 띄울지가 여기서 갈린다.
+var uid := -1
 var actor: Actor = null
 var tags: Array = []          ## 이 동물이 가진 태그 전부 (temperament · diet · behavior_tags)
 var target = null             ## 지금 향하는 사물 (Dictionary) 또는 null
